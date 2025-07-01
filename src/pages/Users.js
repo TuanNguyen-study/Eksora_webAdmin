@@ -1,0 +1,128 @@
+import React, { useState, useEffect } from 'react';
+import { getAllUsers } from '../api/api';
+
+const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=dee2e6&color=495057&size=128';
+
+function Users() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const usersPerPage = 9;
+
+  useEffect(() => {
+    async function fetchUsers() {
+      setLoading(true);
+      try {
+        const data = await getAllUsers();
+        setUsers(data);
+      } catch (err) {
+        setUsers([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchUsers();
+  }, []);
+
+  // Pagination
+  const indexOfLastUser = currentPage * usersPerPage;
+  const indexOfFirstUser = indexOfLastUser - usersPerPage;
+  // Lọc bỏ user là admin
+  const currentUsers = users.filter(u => u.role !== 'admin').slice(indexOfFirstUser, indexOfLastUser);
+  const totalPages = Math.ceil(users.length / usersPerPage);
+  const isDark = document.body.classList.contains('dark-mode');
+
+  return (
+    <div className={`content-wrapper ${isDark ? 'bg-dark text-light' : 'bg-white'}`}>
+      <div className={`content-header ${isDark ? 'bg-dark text-light' : 'bg-white'}`}>
+        <div className="container-fluid">
+          <div className="row mb-2">
+            <div className="col-sm-6">
+              <h1 className={isDark ? 'text-light' : 'text-dark'}>Users</h1>
+            </div>
+            <div className="col-sm-6">
+              <ol className="breadcrumb float-sm-right">
+                <li className="breadcrumb-item"><a href="#">Home</a></li>
+                <li className="breadcrumb-item active">Users</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+      <section className="content">
+        <div className="card card-solid">
+          <div className="card-body pb-0">
+            {loading ? (
+              <div>Đang tải dữ liệu...</div>
+            ) : (
+              <div className="row">
+                {currentUsers.map((user, idx) => (
+                  <div className="col-12 col-sm-6 col-md-4 d-flex align-items-stretch flex-column" key={user._id || idx}>
+                    <div className="card bg-light d-flex flex-fill">
+                      <div className="card-header text-muted border-bottom-0">
+                        {user.role === 'admin' ? 'Admin' : 'User'}
+                      </div>
+                      <div className="card-body pt-0">
+                        <div className="row">
+                          <div className="col-7">
+                            <h2 className="lead"><b>{user.first_name} {user.last_name}</b></h2>
+                            <ul className="ml-4 mb-0 fa-ul text-muted">
+                              {user.email && (
+                                <li className="small"><span className="fa-li"><i className="fas fa-lg fa-envelope"></i></span> Email: {user.email}</li>
+                              )}
+                              {user.address && (
+                                <li className="small"><span className="fa-li"><i className="fas fa-lg fa-building"></i></span> Address: {user.address}</li>
+                              )}
+                              {user.phone && (
+                                <li className="small"><span className="fa-li"><i className="fas fa-lg fa-phone"></i></span> Phone #: {user.phone}</li>
+                              )}
+                            </ul>
+                          </div>
+                          <div className="col-5 text-center">
+                            <img src={user.avatar || DEFAULT_AVATAR} alt="user-avatar" className="img-circle img-fluid" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="card-footer">
+                        <div className="text-right">
+                          <a href="#" className="btn btn-sm bg-teal">
+                            <i className="fas fa-comments"></i>
+                          </a>
+                          <a href="#" className="btn btn-sm btn-primary">
+                            <i className="fas fa-user"></i> View Profile
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Pagination */}
+          {!loading && totalPages > 1 && (
+            <div className="card-footer">
+              <nav aria-label="Users Page Navigation">
+                <ul className="pagination justify-content-center m-0">
+                  {Array.from({ length: totalPages }, (_, i) => (
+                    <li key={i + 1} className={`page-item${currentPage === i + 1 ? ' active' : ''}`}>
+                      <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            </div>
+          )}
+        </div>
+      </section>
+      <footer className={`main-footer ${isDark ? 'bg-dark text-light' : 'bg-white text-dark'}`}>
+        <div className="float-right d-none d-sm-block">
+          <b>Version</b> 3.2.0
+        </div>
+        <strong>Copyright &copy; 2014-2021 <a href="https://adminlte.io">AdminLTE.io</a>.</strong> All rights reserved.
+      </footer>
+    </div>
+  );
+}
+
+export default Users;

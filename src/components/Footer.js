@@ -1,4 +1,3 @@
-
 function Footer() {
   return (
     <div >
@@ -10,7 +9,7 @@ function Footer() {
   </aside>
   {/* /.control-sidebar */}
   {/* Main Footer */}
-  <footer className="main-footer">
+  <footer className="main-footer bg-white text-center">
     <strong>Copyright © 2025 <a href="https://adminlte.io">Eksora</a>.</strong>
     All rights reserved.
    

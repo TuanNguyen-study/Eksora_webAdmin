@@ -1,20 +1,72 @@
+import React, { useEffect, useState } from 'react';
+import { getTours, getAllBookings, getAllUsers } from '../api/api';
+const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=dee2e6&color=495057&size=128';
 
 function Home() {
+  const [recentTours, setRecentTours] = useState([]);
+  const [latestBookings, setLatestBookings] = useState([]);
+  const [latestUsers, setLatestUsers] = useState([]);
+  const [newMembersCount, setNewMembersCount] = useState(0);
+  useEffect(() => {
+    async function fetchRecentTours() {
+      try {
+        const data = await getTours();
+        // Lấy 4 tour mới nhất (giả sử data đã sort theo created_at giảm dần, nếu không thì sort)
+        const sorted = data.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        setRecentTours(sorted.slice(0, 4));
+      } catch (err) {
+        setRecentTours([]);
+      }
+    }
+    fetchRecentTours();
+  }, []);
+  useEffect(() => {
+    async function fetchLatestBookings() {
+      try {
+        const data = await getAllBookings();
+        // Lấy 7 booking mới nhất
+        const sorted = data.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        setLatestBookings(sorted.slice(0, 7));
+      } catch (err) {
+        setLatestBookings([]);
+      }
+    }
+    fetchLatestBookings();
+  }, []);
+  useEffect(() => {
+    async function fetchLatestUsers() {
+      try {
+        const data = await getAllUsers();
+        const users = data.filter(u => u.role !== 'admin');
+        // Sắp xếp theo ngày tạo mới nhất
+        const sorted = users.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        setLatestUsers(sorted.slice(0, 8));
+        // Đếm số lượng user tạo trong 1 tháng gần nhất
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        setNewMembersCount(users.filter(u => new Date(u.createdAt) >= oneMonthAgo).length);
+      } catch (err) {
+        setLatestUsers([]);
+        setNewMembersCount(0);
+      }
+    }
+    fetchLatestUsers();
+  }, []);
   return (
     <div >
    {/* Content Wrapper. Contains page content */}
-<div className="content-wrapper">
+<div className="content-wrapper bg-light">
   {/* Content Header (Page header) */}
-  <div className="content-header">
+  <div className="content-header bg-light">
     <div className="container-fluid">
       <div className="row mb-2">
         <div className="col-sm-6">
-          <h1 className="m-0">Dashboard </h1>
+          <h1 className="m-0 text-dark">Dashboard </h1>
         </div>{/* /.col */}
         <div className="col-sm-6">
-          <ol className="breadcrumb float-sm-right">
-            <li className="breadcrumb-item"><a href="#">Home</a></li>
-            <li className="breadcrumb-item active">Dashboard </li>
+          <ol className="breadcrumb float-sm-right bg-light">
+            <li className="breadcrumb-item"><a href="#" className="text-dark">Home</a></li>
+            <li className="breadcrumb-item active text-dark">Dashboard </li>
           </ol>
         </div>{/* /.col */}
       </div>{/* /.row */}
@@ -22,8 +74,8 @@ function Home() {
   </div>
   {/* /.content-header */}
   {/* Main content */}
-  <section className="content">
-    <div className="container-fluid">
+  <section className="content bg-light">
+    <div className="container-fluid bg-light">
       {/* Info boxes */}
       <div className="row">
         <div className="col-12 col-sm-6 col-md-3">
@@ -83,26 +135,26 @@ function Home() {
       {/* /.row */}
       <div className="row">
         <div className="col-md-12">
-          <div className="card">
-            <div className="card-header">
-              <h5 className="card-title">Monthly Recap Report</h5>
+          <div className="card bg-white border-light">
+            <div className="card-header bg-light border-bottom-0">
+              <h5 className="card-title text-dark">Monthly Recap Report</h5>
               <div className="card-tools">
-                <button type="button" className="btn btn-tool" data-card-widget="collapse">
+                <button type="button" className="btn btn-tool text-dark" data-card-widget="collapse">
                   <i className="fas fa-minus" />
                 </button>
                 <div className="btn-group">
-                  <button type="button" className="btn btn-tool dropdown-toggle" data-toggle="dropdown">
+                  <button type="button" className="btn btn-tool text-dark dropdown-toggle" data-toggle="dropdown">
                     <i className="fas fa-wrench" />
                   </button>
-                  <div className="dropdown-menu dropdown-menu-right" role="menu">
-                    <a href="#" className="dropdown-item">Action</a>
-                    <a href="#" className="dropdown-item">Another action</a>
-                    <a href="#" className="dropdown-item">Something else here</a>
+                  <div className="dropdown-menu dropdown-menu-right bg-white" role="menu">
+                    <a href="#" className="dropdown-item text-dark">Action</a>
+                    <a href="#" className="dropdown-item text-dark">Another action</a>
+                    <a href="#" className="dropdown-item text-dark">Something else here</a>
                     <a className="dropdown-divider" />
-                    <a href="#" className="dropdown-item">Separated link</a>
+                    <a href="#" className="dropdown-item text-dark">Separated link</a>
                   </div>
                 </div>
-                <button type="button" className="btn btn-tool" data-card-widget="remove">
+                <button type="button" className="btn btn-tool text-dark" data-card-widget="remove">
                   <i className="fas fa-times" />
                 </button>
               </div>
@@ -415,7 +467,7 @@ function Home() {
                 <div className="card-header">
                   <h3 className="card-title">Latest Members</h3>
                   <div className="card-tools">
-                    <span className="badge badge-danger">8 New Members</span>
+                    <span className="badge badge-danger">{newMembersCount} New Members</span>
                     <button type="button" className="btn btn-tool" data-card-widget="collapse">
                       <i className="fas fa-minus" />
                     </button>
@@ -427,52 +479,24 @@ function Home() {
                 {/* /.card-header */}
                 <div className="card-body p-0">
                   <ul className="users-list clearfix">
-                    <li>
-                      <img src="dist/img/user1-128x128.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">Alexander Pierce</a>
-                      <span className="users-list-date">Today</span>
-                    </li>
-                    <li>
-                      <img src="dist/img/user8-128x128.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">Norman</a>
-                      <span className="users-list-date">Yesterday</span>
-                    </li>
-                    <li>
-                      <img src="dist/img/user7-128x128.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">Jane</a>
-                      <span className="users-list-date">12 Jan</span>
-                    </li>
-                    <li>
-                      <img src="dist/img/user6-128x128.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">John</a>
-                      <span className="users-list-date">12 Jan</span>
-                    </li>
-                    <li>
-                      <img src="dist/img/user2-160x160.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">Alexander</a>
-                      <span className="users-list-date">13 Jan</span>
-                    </li>
-                    <li>
-                      <img src="dist/img/user5-128x128.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">Sarah</a>
-                      <span className="users-list-date">14 Jan</span>
-                    </li>
-                    <li>
-                      <img src="dist/img/user4-128x128.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">Nora</a>
-                      <span className="users-list-date">15 Jan</span>
-                    </li>
-                    <li>
-                      <img src="dist/img/user3-128x128.jpg" alt="User Image" />
-                      <a className="users-list-name" href="#">Nadia</a>
-                      <span className="users-list-date">15 Jan</span>
-                    </li>
+                    {latestUsers.map(user => {
+                      const date = user.createdAt ? new Date(user.createdAt) : null;
+                      const day = date ? date.getDate() : '';
+                      const month = date ? date.toLocaleString('en-US', { month: 'short' }) : '';
+                      return (
+                        <li key={user._id}>
+                          <img src={user.avatar || DEFAULT_AVATAR} alt="User Image" />
+                          <a className="users-list-name" href="#">{user.first_name} {user.last_name}</a>
+                          <span className="users-list-date">{day} {month}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                   {/* /.users-list */}
                 </div>
                 {/* /.card-body */}
                 <div className="card-footer text-center">
-                  <a href="javascript:">View All Users</a>
+                  <a href="/users">View All Users</a>
                 </div>
                 {/* /.card-footer */}
               </div>
@@ -481,10 +505,10 @@ function Home() {
             {/* /.col */}
           </div>
           {/* /.row */}
-          {/* TABLE: LATEST ORDERS */}
+          {/* TABLE: LATEST BOOKINGS */}
           <div className="card">
             <div className="card-header border-transparent">
-              <h3 className="card-title">Latest Orders</h3>
+              <h3 className="card-title">Latest Bookings</h3>
               <div className="card-tools">
                 <button type="button" className="btn btn-tool" data-card-widget="collapse">
                   <i className="fas fa-minus" />
@@ -500,69 +524,28 @@ function Home() {
                 <table className="table m-0">
                   <thead>
                     <tr>
-                      <th>Order ID</th>
-                      <th>Item</th>
+                      <th>Booking ID</th>
+                      <th>Tour</th>
+                      <th>User</th>
                       <th>Status</th>
-                      <th>Popularity</th>
+                      <th>Ngày đặt</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td><a href="pages/examples/invoice.html">OR9842</a></td>
-                      <td>Call of Duty IV</td>
-                      <td><span className="badge badge-success">Shipped</span></td>
-                      <td>
-                        <div className="sparkbar" data-color="#00a65a" data-height={20}>90,80,90,-70,61,-83,63</div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><a href="pages/examples/invoice.html">OR1848</a></td>
-                      <td>Samsung Smart TV</td>
-                      <td><span className="badge badge-warning">Pending</span></td>
-                      <td>
-                        <div className="sparkbar" data-color="#f39c12" data-height={20}>90,80,-90,70,61,-83,68</div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><a href="pages/examples/invoice.html">OR7429</a></td>
-                      <td>iPhone 6 Plus</td>
-                      <td><span className="badge badge-danger">Delivered</span></td>
-                      <td>
-                        <div className="sparkbar" data-color="#f56954" data-height={20}>90,-80,90,70,-61,83,63</div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><a href="pages/examples/invoice.html">OR7429</a></td>
-                      <td>Samsung Smart TV</td>
-                      <td><span className="badge badge-info">Processing</span></td>
-                      <td>
-                        <div className="sparkbar" data-color="#00c0ef" data-height={20}>90,80,-90,70,-61,83,63</div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><a href="pages/examples/invoice.html">OR1848</a></td>
-                      <td>Samsung Smart TV</td>
-                      <td><span className="badge badge-warning">Pending</span></td>
-                      <td>
-                        <div className="sparkbar" data-color="#f39c12" data-height={20}>90,80,-90,70,61,-83,68</div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><a href="pages/examples/invoice.html">OR7429</a></td>
-                      <td>iPhone 6 Plus</td>
-                      <td><span className="badge badge-danger">Delivered</span></td>
-                      <td>
-                        <div className="sparkbar" data-color="#f56954" data-height={20}>90,-80,90,70,-61,83,63</div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td><a href="pages/examples/invoice.html">OR9842</a></td>
-                      <td>Call of Duty IV</td>
-                      <td><span className="badge badge-success">Shipped</span></td>
-                      <td>
-                        <div className="sparkbar" data-color="#00a65a" data-height={20}>90,80,90,-70,61,-83,63</div>
-                      </td>
-                    </tr>
+                    {latestBookings.map(b => (
+                      <tr key={b._id}>
+                        <td>{
+                          'EK' +
+                          (b._id ? b._id.substring(0, 4) : '') +
+                          (b.tour_id?._id ? b.tour_id._id.substring(0, 2) : '') +
+                          (b.user_id?._id ? b.user_id._id.slice(-2) : '')
+                        }</td>
+                        <td>{b.tour_id?.name}</td>
+                        <td>{b.user_id?.first_name} {b.user_id?.last_name}</td>
+                        <td>{b.status === 'pending' ? 'Chưa thanh toán' : b.status === 'success' ? 'Đã thanh toán' : b.status === 'cancelled' ? 'Đã hủy' : b.status}</td>
+                        <td>{b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : ''}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -570,8 +553,7 @@ function Home() {
             </div>
             {/* /.card-body */}
             <div className="card-footer clearfix">
-              <a href="javascript:void(0)" className="btn btn-sm btn-info float-left">Place New Order</a>
-              <a href="javascript:void(0)" className="btn btn-sm btn-secondary float-right">View All Orders</a>
+              <a href="/bookings" className="btn btn-sm btn-info float-right">View All Bookings</a>
             </div>
             {/* /.card-footer */}
           </div>
@@ -685,81 +667,40 @@ function Home() {
           </div>
           {/* /.card */}
           {/* PRODUCT LIST */}
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Recently Added Products</h3>
+          <div className="card bg-white border-light">
+            <div className="card-header bg-light border-bottom-0">
+              <h3 className="card-title text-dark">Recently Added Tours</h3>
               <div className="card-tools">
-                <button type="button" className="btn btn-tool" data-card-widget="collapse">
+                <button type="button" className="btn btn-tool text-dark" data-card-widget="collapse">
                   <i className="fas fa-minus" />
                 </button>
-                <button type="button" className="btn btn-tool" data-card-widget="remove">
+                <button type="button" className="btn btn-tool text-dark" data-card-widget="remove">
                   <i className="fas fa-times" />
                 </button>
               </div>
             </div>
             {/* /.card-header */}
-            <div className="card-body p-0">
+            <div className="card-body p-0 bg-white">
               <ul className="products-list product-list-in-card pl-2 pr-2">
-                <li className="item">
-                  <div className="product-img">
-                    <img src="dist/img/default-150x150.png" alt="Product Image" className="img-size-50" />
-                  </div>
-                  <div className="product-info">
-                    <a href="javascript:void(0)" className="product-title">Samsung TV
-                      <span className="badge badge-warning float-right">$1800</span></a>
-                    <span className="product-description">
-                      Samsung 32" 1080p 60Hz LED Smart HDTV.
-                    </span>
-                  </div>
-                </li>
-                {/* /.item */}
-                <li className="item">
-                  <div className="product-img">
-                    <img src="dist/img/default-150x150.png" alt="Product Image" className="img-size-50" />
-                  </div>
-                  <div className="product-info">
-                    <a href="javascript:void(0)" className="product-title">Bicycle
-                      <span className="badge badge-info float-right">$700</span></a>
-                    <span className="product-description">
-                      26" Mongoose Dolomite Men's 7-speed, Navy Blue.
-                    </span>
-                  </div>
-                </li>
-                {/* /.item */}
-                <li className="item">
-                  <div className="product-img">
-                    <img src="dist/img/default-150x150.png" alt="Product Image" className="img-size-50" />
-                  </div>
-                  <div className="product-info">
-                    <a href="javascript:void(0)" className="product-title">
-                      Xbox One <span className="badge badge-danger float-right">
-                        $350
+                {recentTours.map(tour => (
+                  <li className="item" key={tour._id}>
+                    <div className="product-img">
+                      <img src={tour.image?.[0]} alt="Tour Image" className="img-size-50 border border-light" />
+                    </div>
+                    <div className="product-info">
+                      <span className="product-title text-dark">{tour.name}
+                        <span className="badge badge-primary float-right">{tour.price?.toLocaleString()} đ</span></span>
+                      <span className="product-description text-secondary">
+                        {tour.description?.slice(0, 50)}{tour.description?.length > 50 ? '...' : ''}
                       </span>
-                    </a>
-                    <span className="product-description">
-                      Xbox One Console Bundle with Halo Master Chief Collection.
-                    </span>
-                  </div>
-                </li>
-                {/* /.item */}
-                <li className="item">
-                  <div className="product-img">
-                    <img src="dist/img/default-150x150.png" alt="Product Image" className="img-size-50" />
-                  </div>
-                  <div className="product-info">
-                    <a href="javascript:void(0)" className="product-title">PlayStation 4
-                      <span className="badge badge-success float-right">$399</span></a>
-                    <span className="product-description">
-                      PlayStation 4 500GB Console (PS4)
-                    </span>
-                  </div>
-                </li>
-                {/* /.item */}
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
             {/* /.card-body */}
-            <div className="card-footer text-center">
-              <a href="javascript:void(0)" className="uppercase">View All Products</a>
+            <div className="card-footer text-center bg-light">
+              <a href="/tour" className="uppercase text-primary">View All Tours</a>
             </div>
             {/* /.card-footer */}
           </div>

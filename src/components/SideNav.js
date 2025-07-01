@@ -1,29 +1,42 @@
+import { Link, useLocation } from 'react-router-dom';
+import React from 'react';
+
 function SideNav() {
+  const location = useLocation();
+  const isDashboardActive = location.pathname === '/dashboard ' || location.pathname === '/';
+  const isCategoryActive = location.pathname.startsWith('/tour') || location.pathname.startsWith('/vouchers');
+
   return (
     <div>
-    <aside className="main-sidebar sidebar-dark-primary elevation-4">
+      <aside className="main-sidebar sidebar-light elevation-4">
   {/* Brand Logo */}
-  <a href="dashboard.html" className="brand-link">
-    <img src="/public/dist/img/logo.png" alt="AdminLTE Logo" className="brand-image img-circle elevation-3" style={{opacity: '.8'}} />
-    <span className="brand-text font-weight-light">EKSORA ADMIN</span>
+  <a href="/dashboard" className="brand-link bg-light">
+    <img src="/dist/img/logo.png" alt="EKSORA Logo" className="brand-image img-circle elevation-3" style={{opacity: '.8'}} />
+    <span className="brand-text font-weight-light text-dark">EKSORA ADMIN</span>
   </a>
   {/* Sidebar */}
-  <div className="sidebar">
-    {/* Sidebar user panel (optional) */}
-    <div className="user-panel mt-3 pb-3 mb-3 d-flex">
+  <div className="sidebar bg-light">
+    {/* Sidebar user panel (template mặc định, phía trên menu) */}
+    {/* <div className="user-panel mt-3 pb-3 mb-3 d-flex bg-light">
       <div className="image">
-        <img src="/img/user2-160x160.jpg" className="img-circle elevation-2" alt="User Image" />
+        <img src="/dist/img/user2-160x160.jpg" className="img-circle elevation-2" alt="User Image" />
       </div>
       <div className="info">
-        <a href="#" className="d-block">Tuan Nguyen</a>
+        <a href="#" className="d-block text-dark">Tuan Nguyen</a>
       </div>
-    </div>
+    </div> */}
     {/* SidebarSearch Form */}
-    <div className="form-inline">
+    <div className="form-inline bg-light">
       <div className="input-group" data-widget="sidebar-search">
-        <input className="form-control form-control-sidebar" type="search" placeholder="Search" aria-label="Search" />
+        <input
+          className="form-control form-control-sidebar bg-light"
+          type="search"
+          placeholder="Search"
+          aria-label="Search"
+          style={{ color: '#212529', fontWeight: 'bold' }} // chữ đậm
+        />
         <div className="input-group-append">
-          <button className="btn btn-sidebar">
+          <button className="btn btn-sidebar bg-light" style={{ color: '#212529', fontWeight: 'bold' }}>
             <i className="fas fa-search fa-fw" />
           </button>
         </div>
@@ -31,55 +44,73 @@ function SideNav() {
     </div>
     {/* Sidebar Menu */}
     <nav className="mt-2">
-      <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-        {/* Add icons to the links using the .nav-icon class
-         with font-awesome or any other icon font library */}
+      <ul className="nav nav-pills nav-sidebar flex-column bg-light" data-widget="treeview" role="menu" data-accordion="false">
+        {/* Dashboard */}
         <li className="nav-item menu-open">
-          <a href="#" className="nav-link active">
+          <Link to="/" className="nav-link" style={isDashboardActive ? { background: '#3f6791', color: '#fff' } : {}}>
             <i className="nav-icon fas fa-tachometer-alt" />
             <p>
               Dashboard
               <i className="right fas fa-angle-left" />
             </p>
-          </a>
+          </Link>
           <ul className="nav nav-treeview">
             <li className="nav-item">
-              <a href="./dashboard" className="nav-link active">
+              <Link to="/dashboard" className="nav-link" style={isDashboardActive ? { background: '#ebecec' } : {}}>
                 <i className="far fa-circle nav-icon" />
                 <p>Dashboard</p>
-              </a>
+              </Link>
             </li>
           </ul>
         </li>
 
         {/* Danh mục */}
-        <li className="nav-item menu-open">
-          <a href="#" className="nav-link active">
+        <li className={`nav-item menu-open${isCategoryActive ? ' active' : ''}`}>
+          <a href="#" className="nav-link" style={isCategoryActive ? { background: '#3f6791', color: '#fff' } : {}}>
             <i className="fa-solid fa fa-folder"></i>
             <i className="right fas fa-angle-left" />
              <p> Categories </p>
           </a>
           <ul className="nav nav-treeview">
             <li className="nav-item">
-              <a href="" className="nav-link ">
+              <Link to="/tour" className="nav-link text-dark" style={location.pathname.startsWith('/tour') ? { background: '#ebecec' } : {}}>
                  <i className="far fa-circle nav-icon" />
                 <p>Tours</p>
-              </a>
+              </Link>
             </li>
           </ul>
           <ul className="nav nav-treeview">
             <li className="nav-item">
-              <a href="" className="nav-link ">
+              <Link to="/vouchers" className="nav-link text-dark" style={location.pathname.startsWith('/vouchers') ? { background: '#ebecec' } : {}}>
                 <i className="far fa-circle nav-icon" />
                 <p>Vouchers</p>
-              </a>
+              </Link>
+            </li>
+          </ul>
+           <ul className="nav nav-treeview">
+            <li className="nav-item">
+              <Link to="/users" className="nav-link text-dark" style={location.pathname.startsWith('/users') ? { background: '#ebecec' } : {}}>
+                <i className="far fa-circle nav-icon" />
+                <p>Users</p>
+              </Link>
             </li>
           </ul>
         </li>
-
+        {/* Các mục khác */}
+        <li className="nav-item">
+          <Link to="/bookings" className="nav-link" style={location.pathname.startsWith('/bookings') ? { background: '#3f6791', color: '#fff' } : {}}>
+            <i className="nav-icon fas fa-book" style={location.pathname.startsWith('/bookings') ? { color: '#fff' } : {}}></i>
+            <p>Bookings</p>
+          </Link>
+        </li>
+        <li className="nav-item">
+          <Link to="/calendar" className="nav-link" style={location.pathname.startsWith('/calendar') ? { background: '#3f6791', color: '#fff' } : {}}>
+            <i className="nav-icon far fa-calendar-alt" style={location.pathname.startsWith('/calendar') ? { color: '#fff' } : {}}></i>
+            <p>Calendar</p>
+          </Link>
+        </li>
       </ul>
     </nav>
-    {/* /.sidebar-menu */}
   </div>
   {/* /.sidebar */}
 </aside>
