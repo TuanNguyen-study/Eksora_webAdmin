@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { getTours } from '../api/api';
+import { getTours, getCategories, getSuppliers, updateTour } from '../api/api';
+import { FaTag, FaClock, FaList, FaMapMarkerAlt, FaImage, FaAlignLeft, FaCheckCircle } from 'react-icons/fa';
+import { uploadImageToCloudinary } from '../api/cloudinary';
+import CkeditorField from '../components/CkeditorField';
 
 function Tour() {
   const [tours, setTours] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedTour, setSelectedTour] = useState(null);
@@ -11,6 +16,7 @@ function Tour() {
   const [form, setForm] = useState({ name: '', description: '', price: '', image: [''], duration: '', location: '', rating: '', cateID: { name: '', image: '' }, province: '', status: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [editingDescription, setEditingDescription] = useState(false);
 
   useEffect(() => {
     async function fetchTours() {
@@ -26,6 +32,10 @@ function Tour() {
       }
     }
     fetchTours();
+    // Lấy danh mục
+    getCategories().then(setCategories).catch(() => setCategories([]));
+    // Lấy nhà cung cấp
+    getSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
   }, []);
 
   const handleView = (tour) => {
@@ -54,25 +64,55 @@ function Tour() {
   };
 
   const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    if (name.startsWith('cateID.')) {
-      setForm({ ...form, cateID: { ...form.cateID, [name.split('.')[1]]: value } });
-    } else if (name === 'image') {
-      setForm({ ...form, image: value.split(',') });
-    } else {
-      setForm({ ...form, [name]: value });
+    // Hỗ trợ cả event từ input/select và object từ CKEditor
+    if (e && e.target) {
+      const { name, value } = e.target;
+      if (name.startsWith('cateID.')) {
+        setForm({ ...form, cateID: { ...form.cateID, [name.split('.')[1]]: value } });
+      } else if (name === 'image') {
+        setForm({ ...form, image: value.split(',') });
+      } else {
+        setForm({ ...form, [name]: value });
+      }
+    } else if (e && e.name && typeof e.value === 'string') {
+      // Trường hợp CKEditor trả về { name, value }
+      setForm({ ...form, [e.name]: e.value });
     }
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (modalType === 'add') {
-      const newTour = { ...form, _id: Date.now().toString() };
-      setTours([...tours, newTour]);
+      try {
+        const newTour = { ...form, _id: Date.now().toString() };
+        setTours([...tours, newTour]);
+        alert('Thêm tour thành công!');
+        setShowModal(false);
+      } catch (err) {
+        alert('Lỗi khi tạo tour!');
+      }
     } else if (modalType === 'edit') {
-      setTours(tours.map(t => t._id === selectedTour._id ? { ...form, _id: t._id } : t));
+      try {
+        const updated = await updateTour(selectedTour._id, form);
+        setTours(tours.map(t => t._id === selectedTour._id ? updated : t));
+        alert('Cập nhật tour thành công!');
+        setShowModal(false);
+      } catch (err) {
+        alert('Lỗi khi cập nhật tour!');
+      }
     }
-    setShowModal(false);
+  };
+
+  // Xử lý upload ảnh từ máy tính lên Cloudinary
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    try {
+      const urls = await Promise.all(files.map(file => uploadImageToCloudinary(file)));
+      setForm({ ...form, image: urls });
+    } catch (err) {
+      alert('Lỗi upload ảnh!');
+    }
   };
 
   // Pagination logic
@@ -116,7 +156,6 @@ function Tour() {
                         <th>Địa điểm</th>
                         <th>Giá</th>
                         <th>Thời lượng</th>
-                        <th>Rating</th>
                         <th>Danh mục</th>
                         <th>Hành động</th>
                       </tr>
@@ -127,9 +166,8 @@ function Tour() {
                           <td><img src={tour.image?.[0]} alt={tour.name} style={{ width: 60, height: 40, objectFit: 'cover' }} /></td>
                           <td>{tour.name}</td>
                           <td>{tour.location}</td>
-                          <td>{tour.price?.toLocaleString()} đ</td>
+                          <td>{Number(tour.price).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</td>
                           <td>{tour.duration}</td>
-                          <td>{tour.rating}</td>
                           <td>{tour.cateID?.name}</td>
                           <td>
                             <button className="btn btn-info btn-sm mr-2" onClick={() => handleView(tour)}>
@@ -201,67 +239,133 @@ function Tour() {
               <div className="modal-body">
                 {modalType === 'view' ? (
                   <div>
-                    <div className="mb-3 d-flex flex-wrap">
+                    <div className="mb-3 d-flex flex-wrap justify-content-center">
                       {selectedTour.image?.map((img, idx) => (
-                        <img key={idx} src={img} alt="tour" style={{ width: 120, height: 80, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
+                        <img key={idx} src={img} alt="tour" style={{ width: 180, height: 120, objectFit: 'cover', marginRight: 8, marginBottom: 8, borderRadius: 8, boxShadow: '0 2px 8px #ccc' }} />
                       ))}
                     </div>
-                    <p><b>Tên Tour:</b> {selectedTour.name}</p>
-                    <p><b>Địa điểm:</b> {selectedTour.location}</p>
-                    <p><b>Giá:</b> {selectedTour.price?.toLocaleString()} đ</p>
-                    <p><b>Thời lượng:</b> {selectedTour.duration}</p>
-                    <p><b>Rating:</b> {selectedTour.rating}</p>
-                    <p><b>Danh mục:</b> {selectedTour.cateID?.name}</p>
-                    <p><b>Tỉnh/Thành:</b> {selectedTour.province}</p>
-                    <p><b>Mô tả:</b> {selectedTour.description}</p>
-                    <p><b>Trạng thái:</b> {selectedTour.status === 'active' ? 'Active' : 'Deactive'}</p>
+                    <div className="row">
+                      <div className="col-md-6 mb-2">
+                        <b>Tên Tour:</b> <span className="ml-1">{selectedTour.name}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Địa điểm:</b> <span className="ml-1">{selectedTour.location}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Giá:</b> <span className="ml-1">{Number(selectedTour.price).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Thời lượng:</b> <span className="ml-1">{selectedTour.duration}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Danh mục:</b> <span className="ml-1">{selectedTour.cateID?.name}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Tỉnh/Thành:</b> <span className="ml-1">{selectedTour.province}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Trạng thái:</b> <span className="ml-1">{selectedTour.status === 'active' ? 'Active' : 'Deactive'}</span>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <b>Mô tả:</b>
+                      <div style={{ maxHeight: 250, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fafbfc', marginTop: 6 }}>
+                        <span dangerouslySetInnerHTML={{ __html: selectedTour.description }} />
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <form onSubmit={handleFormSubmit}>
-                    <div className="form-group">
-                      <label>Tên Tour</label>
-                      <input type="text" className="form-control bg-light" name="name" value={form.name} onChange={handleFormChange} required />
+                    {!editingDescription && (
+                      <>
+                        <div className="form-group">
+                          <label><FaTag className="mr-1" />Tên Tour</label>
+                          <input type="text" className="form-control bg-light" name="name" value={form.name} onChange={handleFormChange} required />
+                        </div>
+                        <div className="form-group">
+                          <label><FaMapMarkerAlt className="mr-1" />Địa điểm</label>
+                          <input type="text" className="form-control bg-light" name="location" value={form.location} onChange={handleFormChange} required />
+                        </div>
+                        <div className="form-row">
+                          <div className="form-group col-md-6">
+                            <label><FaTag className="mr-1" />Giá</label>
+                            <input type="number" className="form-control bg-light" name="price" value={form.price} onChange={handleFormChange} required />
+                          </div>
+                          <div className="form-group col-md-6">
+                            <label><FaClock className="mr-1" />Thời lượng</label>
+                            <select className="form-control bg-light" name="duration" value={form.duration} onChange={handleFormChange} required>
+                              <option value="">-- Chọn thời lượng --</option>
+                              <option value="Nửa ngày">Nửa ngày</option>
+                              <option value="1 Ngày">1 Ngày</option>
+                              <option value="2 Ngày 1 Đêm">2 Ngày 1 Đêm</option>
+                              <option value="3 Ngày 2 Đêm">3 Ngày 2 Đêm</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label><FaList className="mr-1" />Danh mục</label>
+                          <select className="form-control bg-light" name="cateID.name" value={form.cateID.name} onChange={handleFormChange} required>
+                            <option value="">-- Chọn danh mục --</option>
+                            {categories.map(cate => (
+                              <option key={cate._id} value={cate.name}>{cate.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label><FaList className="mr-1" />Nhà cung cấp</label>
+                          <select className="form-control bg-light" name="supplier_id" value={form.supplier_id || ''} onChange={handleFormChange} required>
+                            <option value="">-- Chọn nhà cung cấp --</option>
+                            {suppliers.map(sup => (
+                              <option key={sup._id} value={sup._id}>{sup.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-row">
+                          <div className="form-group col-md-6">
+                            <label><i className="fas fa-clock mr-1" />Giờ mở cửa</label>
+                            <input type="time" className="form-control bg-light" name="open_time" value={form.open_time || ''} onChange={handleFormChange} required />
+                          </div>
+                          <div className="form-group col-md-6">
+                            <label><i className="fas fa-clock mr-1" />Giờ đóng cửa</label>
+                            <input type="time" className="form-control bg-light" name="close_time" value={form.close_time || ''} onChange={handleFormChange} required />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label><span className="mr-1"><i className="fas fa-image" /></span>Ảnh (chọn nhiều ảnh)</label>
+                          <input type="file" className="form-control-file" accept="image/*" multiple onChange={handleImageUpload} />
+                          <div className="d-flex flex-wrap mt-2">
+                            {form.image && form.image.map((img, idx) => (
+                              <img key={idx} src={img} alt="tour" style={{ width: 60, height: 40, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {/* Trường mô tả luôn hiển thị, nhưng khi edit thì các trường khác ẩn */}
+                    <div className="form-group" style={{ position: 'relative' }}>
+                      <label><FaAlignLeft className="mr-1" />Mô tả</label>
+                      {!editingDescription && (
+                        <button type="button" className="btn btn-sm btn-outline-primary ml-2" style={{ position: 'absolute', right: 0, top: 0 }} onClick={() => setEditingDescription(true)}>
+                          Sửa mô tả
+                        </button>
+                      )}
+                      <div style={{ maxHeight: editingDescription ? 400 : 120, overflowY: 'auto', transition: 'max-height 0.3s', border: editingDescription ? '1px solid #007bff' : undefined, borderRadius: 6, background: '#fff' }}>
+                        <CkeditorField
+                          name="description"
+                          value={form.description}
+                          onChange={handleFormChange}
+                          readOnly={!editingDescription}
+                        />
+                      </div>
+                      {editingDescription && (
+                        <button type="button" className="btn btn-sm btn-success mt-2" onClick={() => setEditingDescription(false)}>
+                          Lưu mô tả
+                        </button>
+                      )}
                     </div>
-                    <div className="form-group">
-                      <label>Địa điểm</label>
-                      <input type="text" className="form-control bg-light" name="location" value={form.location} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Giá</label>
-                      <input type="number" className="form-control bg-light" name="price" value={form.price} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Thời lượng</label>
-                      <input type="text" className="form-control bg-light" name="duration" value={form.duration} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Rating</label>
-                      <input type="number" step="0.1" className="form-control bg-light" name="rating" value={form.rating} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Danh mục</label>
-                      <input type="text" className="form-control bg-light" name="cateID.name" value={form.cateID.name} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Tỉnh/Thành</label>
-                      <input type="text" className="form-control bg-light" name="province" value={form.province} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Ảnh (dán nhiều link, ngăn cách dấu phẩy)</label>
-                      <input type="text" className="form-control bg-light" name="image" value={form.image.join(',')} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Mô tả</label>
-                      <textarea className="form-control bg-light" name="description" value={form.description} onChange={handleFormChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Trạng thái</label>
-                      <select className="form-control bg-light" name="status" value={form.status || ''} onChange={handleFormChange} required>
-                        <option value="active">Active</option>
-                        <option value="deactive">Deactive</option>
-                      </select>
-                    </div>
-                    <button type="submit" className="btn btn-success">Lưu</button>
+                    {!editingDescription && (
+                      <button type="submit" className="btn btn-success"><i className="fas fa-save mr-1"></i>Lưu</button>
+                    )}
                   </form>
                 )}
               </div>

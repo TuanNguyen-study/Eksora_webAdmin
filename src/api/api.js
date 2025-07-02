@@ -207,3 +207,36 @@ export const getAllBookings = async () => {
   }
 };
 
+// API tạo tour mới
+export const createTour = async (tourData) => {
+  try {
+    const response = await AxiosInstance.post('/api/tours', tourData);
+    return response.data;
+  } catch (error) {
+    console.error('Lỗi khi tạo tour:', error);
+    throw error;
+  }
+};
+
+// API cập nhật tour theo id
+export const updateTour = async (_id, tourData) => {
+  try {
+    const response = await AxiosInstance.put(`/api/${_id}`, tourData);
+    return response.data;
+  } catch (error) {
+    console.error('Lỗi khi cập nhật tour:', error);
+    throw error;
+  }
+};
+
+// API lấy danh sách đối tác (suppliers)
+export const getSuppliers = async () => {
+  try {
+    const response = await AxiosInstance.get('/api/suppliers');
+    return response.data;
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách suppliers:', error);
+    throw error;
+  }
+};
+

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getTours, getAllBookings, getAllUsers } from '../api/api';
+import Calendar from '../pages/Calendar';
 const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=dee2e6&color=495057&size=128';
 
 function Home() {
@@ -76,7 +77,8 @@ function Home() {
   {/* Main content */}
   <section className="content bg-light">
     <div className="container-fluid bg-light">
-      {/* Info boxes */}
+     
+      {/* Info boxes và các phần còn lại */}
       <div className="row">
         <div className="col-12 col-sm-6 col-md-3">
           <div className="info-box">
@@ -262,249 +264,23 @@ function Home() {
         {/* /.col */}
       </div>
       {/* /.row */}
+       {/* Calendar riêng một dòng */}
+      <div className="row mb-3">
+        <div className="col-12">
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Lịch Booking</h3>
+            </div>
+            <div className="card-body">
+              <Calendar />
+            </div>
+          </div>
+        </div>
+      </div>
       {/* Main row */}
       <div className="row">
         {/* Left col */}
         <div className="col-md-8">
-         
-          {/* /.card */}
-          <div className="row">
-            <div className="col-md-6">
-              {/* DIRECT CHAT */}
-              <div className="card direct-chat direct-chat-warning">
-                <div className="card-header">
-                  <h3 className="card-title">Direct Chat</h3>
-                  <div className="card-tools">
-                    <span title="3 New Messages" className="badge badge-warning">3</span>
-                    <button type="button" className="btn btn-tool" data-card-widget="collapse">
-                      <i className="fas fa-minus" />
-                    </button>
-                    <button type="button" className="btn btn-tool" title="Contacts" data-widget="chat-pane-toggle">
-                      <i className="fas fa-comments" />
-                    </button>
-                    <button type="button" className="btn btn-tool" data-card-widget="remove">
-                      <i className="fas fa-times" />
-                    </button>
-                  </div>
-                </div>
-                {/* /.card-header */}
-                <div className="card-body">
-                  {/* Conversations are loaded here */}
-                  <div className="direct-chat-messages">
-                    {/* Message. Default to the left */}
-                    <div className="direct-chat-msg">
-                      <div className="direct-chat-infos clearfix">
-                        <span className="direct-chat-name float-left">Alexander Pierce</span>
-                        <span className="direct-chat-timestamp float-right">23 Jan 2:00 pm</span>
-                      </div>
-                      {/* /.direct-chat-infos */}
-                      <img className="direct-chat-img" src="dist/img/user1-128x128.jpg" alt="message user image" />
-                      {/* /.direct-chat-img */}
-                      <div className="direct-chat-text">
-                        Is this template really for free? That's unbelievable!
-                      </div>
-                      {/* /.direct-chat-text */}
-                    </div>
-                    {/* /.direct-chat-msg */}
-                    {/* Message to the right */}
-                    <div className="direct-chat-msg right">
-                      <div className="direct-chat-infos clearfix">
-                        <span className="direct-chat-name float-right">Sarah Bullock</span>
-                        <span className="direct-chat-timestamp float-left">23 Jan 2:05 pm</span>
-                      </div>
-                      {/* /.direct-chat-infos */}
-                      <img className="direct-chat-img" src="dist/img/user3-128x128.jpg" alt="message user image" />
-                      {/* /.direct-chat-img */}
-                      <div className="direct-chat-text">
-                        You better believe it!
-                      </div>
-                      {/* /.direct-chat-text */}
-                    </div>
-                    {/* /.direct-chat-msg */}
-                    {/* Message. Default to the left */}
-                    <div className="direct-chat-msg">
-                      <div className="direct-chat-infos clearfix">
-                        <span className="direct-chat-name float-left">Alexander Pierce</span>
-                        <span className="direct-chat-timestamp float-right">23 Jan 5:37 pm</span>
-                      </div>
-                      {/* /.direct-chat-infos */}
-                      <img className="direct-chat-img" src="dist/img/user1-128x128.jpg" alt="message user image" />
-                      {/* /.direct-chat-img */}
-                      <div className="direct-chat-text">
-                        Working with AdminLTE on a great new app! Wanna join?
-                      </div>
-                      {/* /.direct-chat-text */}
-                    </div>
-                    {/* /.direct-chat-msg */}
-                    {/* Message to the right */}
-                    <div className="direct-chat-msg right">
-                      <div className="direct-chat-infos clearfix">
-                        <span className="direct-chat-name float-right">Sarah Bullock</span>
-                        <span className="direct-chat-timestamp float-left">23 Jan 6:10 pm</span>
-                      </div>
-                      {/* /.direct-chat-infos */}
-                      <img className="direct-chat-img" src="dist/img/user3-128x128.jpg" alt="message user image" />
-                      {/* /.direct-chat-img */}
-                      <div className="direct-chat-text">
-                        I would love to.
-                      </div>
-                      {/* /.direct-chat-text */}
-                    </div>
-                    {/* /.direct-chat-msg */}
-                  </div>
-                  {/*/.direct-chat-messages*/}
-                  {/* Contacts are loaded here */}
-                  <div className="direct-chat-contacts">
-                    <ul className="contacts-list">
-                      <li>
-                        <a href="#">
-                          <img className="contacts-list-img" src="dist/img/user1-128x128.jpg" alt="User Avatar" />
-                          <div className="contacts-list-info">
-                            <span className="contacts-list-name">
-                              Count Dracula
-                              <small className="contacts-list-date float-right">2/28/2015</small>
-                            </span>
-                            <span className="contacts-list-msg">How have you been? I was...</span>
-                          </div>
-                          {/* /.contacts-list-info */}
-                        </a>
-                      </li>
-                      {/* End Contact Item */}
-                      <li>
-                        <a href="#">
-                          <img className="contacts-list-img" src="dist/img/user7-128x128.jpg" alt="User Avatar" />
-                          <div className="contacts-list-info">
-                            <span className="contacts-list-name">
-                              Sarah Doe
-                              <small className="contacts-list-date float-right">2/23/2015</small>
-                            </span>
-                            <span className="contacts-list-msg">I will be waiting for...</span>
-                          </div>
-                          {/* /.contacts-list-info */}
-                        </a>
-                      </li>
-                      {/* End Contact Item */}
-                      <li>
-                        <a href="#">
-                          <img className="contacts-list-img" src="dist/img/user3-128x128.jpg" alt="User Avatar" />
-                          <div className="contacts-list-info">
-                            <span className="contacts-list-name">
-                              Nadia Jolie
-                              <small className="contacts-list-date float-right">2/20/2015</small>
-                            </span>
-                            <span className="contacts-list-msg">I'll call you back at...</span>
-                          </div>
-                          {/* /.contacts-list-info */}
-                        </a>
-                      </li>
-                      {/* End Contact Item */}
-                      <li>
-                        <a href="#">
-                          <img className="contacts-list-img" src="dist/img/user5-128x128.jpg" alt="User Avatar" />
-                          <div className="contacts-list-info">
-                            <span className="contacts-list-name">
-                              Nora S. Vans
-                              <small className="contacts-list-date float-right">2/10/2015</small>
-                            </span>
-                            <span className="contacts-list-msg">Where is your new...</span>
-                          </div>
-                          {/* /.contacts-list-info */}
-                        </a>
-                      </li>
-                      {/* End Contact Item */}
-                      <li>
-                        <a href="#">
-                          <img className="contacts-list-img" src="dist/img/user6-128x128.jpg" alt="User Avatar" />
-                          <div className="contacts-list-info">
-                            <span className="contacts-list-name">
-                              John K.
-                              <small className="contacts-list-date float-right">1/27/2015</small>
-                            </span>
-                            <span className="contacts-list-msg">Can I take a look at...</span>
-                          </div>
-                          {/* /.contacts-list-info */}
-                        </a>
-                      </li>
-                      {/* End Contact Item */}
-                      <li>
-                        <a href="#">
-                          <img className="contacts-list-img" src="dist/img/user8-128x128.jpg" alt="User Avatar" />
-                          <div className="contacts-list-info">
-                            <span className="contacts-list-name">
-                              Kenneth M.
-                              <small className="contacts-list-date float-right">1/4/2015</small>
-                            </span>
-                            <span className="contacts-list-msg">Never mind I found...</span>
-                          </div>
-                          {/* /.contacts-list-info */}
-                        </a>
-                      </li>
-                      {/* End Contact Item */}
-                    </ul>
-                    {/* /.contacts-list */}
-                  </div>
-                  {/* /.direct-chat-pane */}
-                </div>
-                {/* /.card-body */}
-                <div className="card-footer">
-                  <form action="#" method="post">
-                    <div className="input-group">
-                      <input type="text" name="message" placeholder="Type Message ..." className="form-control" />
-                      <span className="input-group-append">
-                        <button type="button" className="btn btn-warning">Send</button>
-                      </span>
-                    </div>
-                  </form>
-                </div>
-                {/* /.card-footer*/}
-              </div>
-              {/*/.direct-chat */}
-            </div>
-            {/* /.col */}
-            <div className="col-md-6">
-              {/* USERS LIST */}
-              <div className="card">
-                <div className="card-header">
-                  <h3 className="card-title">Latest Members</h3>
-                  <div className="card-tools">
-                    <span className="badge badge-danger">{newMembersCount} New Members</span>
-                    <button type="button" className="btn btn-tool" data-card-widget="collapse">
-                      <i className="fas fa-minus" />
-                    </button>
-                    <button type="button" className="btn btn-tool" data-card-widget="remove">
-                      <i className="fas fa-times" />
-                    </button>
-                  </div>
-                </div>
-                {/* /.card-header */}
-                <div className="card-body p-0">
-                  <ul className="users-list clearfix">
-                    {latestUsers.map(user => {
-                      const date = user.createdAt ? new Date(user.createdAt) : null;
-                      const day = date ? date.getDate() : '';
-                      const month = date ? date.toLocaleString('en-US', { month: 'short' }) : '';
-                      return (
-                        <li key={user._id}>
-                          <img src={user.avatar || DEFAULT_AVATAR} alt="User Image" />
-                          <a className="users-list-name" href="#">{user.first_name} {user.last_name}</a>
-                          <span className="users-list-date">{day} {month}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {/* /.users-list */}
-                </div>
-                {/* /.card-body */}
-                <div className="card-footer text-center">
-                  <a href="/users">View All Users</a>
-                </div>
-                {/* /.card-footer */}
-              </div>
-              {/*/.card */}
-            </div>
-            {/* /.col */}
-          </div>
-          {/* /.row */}
           {/* TABLE: LATEST BOOKINGS */}
           <div className="card">
             <div className="card-header border-transparent">
@@ -598,74 +374,6 @@ function Home() {
             {/* /.info-box-content */}
           </div>
           {/* /.info-box */}
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Browser Usage</h3>
-              <div className="card-tools">
-                <button type="button" className="btn btn-tool" data-card-widget="collapse">
-                  <i className="fas fa-minus" />
-                </button>
-                <button type="button" className="btn btn-tool" data-card-widget="remove">
-                  <i className="fas fa-times" />
-                </button>
-              </div>
-            </div>
-            {/* /.card-header */}
-            <div className="card-body">
-              <div className="row">
-                <div className="col-md-8">
-                  <div className="chart-responsive">
-                    <canvas id="pieChart" height={150} />
-                  </div>
-                  {/* ./chart-responsive */}
-                </div>
-                {/* /.col */}
-                <div className="col-md-4">
-                  <ul className="chart-legend clearfix">
-                    <li><i className="far fa-circle text-danger" /> Chrome</li>
-                    <li><i className="far fa-circle text-success" /> IE</li>
-                    <li><i className="far fa-circle text-warning" /> FireFox</li>
-                    <li><i className="far fa-circle text-info" /> Safari</li>
-                    <li><i className="far fa-circle text-primary" /> Opera</li>
-                    <li><i className="far fa-circle text-secondary" /> Navigator</li>
-                  </ul>
-                </div>
-                {/* /.col */}
-              </div>
-              {/* /.row */}
-            </div>
-            {/* /.card-body */}
-            <div className="card-footer p-0">
-              <ul className="nav nav-pills flex-column">
-                <li className="nav-item">
-                  <a href="#" className="nav-link">
-                    United States of America
-                    <span className="float-right text-danger">
-                      <i className="fas fa-arrow-down text-sm" />
-                      12%</span>
-                  </a>
-                </li>
-                <li className="nav-item">
-                  <a href="#" className="nav-link">
-                    India
-                    <span className="float-right text-success">
-                      <i className="fas fa-arrow-up text-sm" /> 4%
-                    </span>
-                  </a>
-                </li>
-                <li className="nav-item">
-                  <a href="#" className="nav-link">
-                    China
-                    <span className="float-right text-warning">
-                      <i className="fas fa-arrow-left text-sm" /> 0%
-                    </span>
-                  </a>
-                </li>
-              </ul>
-            </div>
-            {/* /.footer */}
-          </div>
-          {/* /.card */}
           {/* PRODUCT LIST */}
           <div className="card bg-white border-light">
             <div className="card-header bg-light border-bottom-0">

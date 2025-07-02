@@ -59,53 +59,26 @@ function Calendar() {
   };
 
   return (
-    <div className="content-wrapper">
-      <section className="content-header">
-        <div className="container-fluid">
-          <div className="row mb-2">
-            <div className="col-sm-6">
-              <h1>Calendar</h1>
-            </div>
-            <div className="col-sm-6">
-              <ol className="breadcrumb float-sm-right">
-                <li className="breadcrumb-item"><a href="#">Home</a></li>
-                <li className="breadcrumb-item active">Calendar</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section className="content">
-        <div className="container-fluid">
-          <div className="row">
-            <div className="col-12">
-              <div className="card card-primary">
-                <div className="card-body p-0">
-                  {loading ? (
-                    <div className="p-3">Đang tải dữ liệu...</div>
-                  ) : (
-                    <FullCalendar
-                      plugins={[dayGridPlugin, interactionPlugin]}
-                      initialView="dayGridMonth"
-                      locale="vi"
-                      events={events}
-                      eventContent={renderEventContent}
-                      height="auto"
-                      selectable={true}
-                      select={handleDateSelect}
-                      headerToolbar={{
-                        left: 'prev,next today',
-                        center: 'title',
-                        right: 'dayGridMonth,dayGridWeek'
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+    <div style={{ background: '#fff', borderRadius: 8, padding: 0 }}>
+      {loading ? (
+        <div className="p-3">Đang tải dữ liệu...</div>
+      ) : (
+        <FullCalendar
+          plugins={[dayGridPlugin, interactionPlugin]}
+          initialView="dayGridMonth"
+          locale="vi"
+          events={events}
+          eventContent={renderEventContent}
+          height="auto"
+          selectable={true}
+          select={handleDateSelect}
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,dayGridWeek'
+          }}
+        />
+      )}
     </div>
   );
 }

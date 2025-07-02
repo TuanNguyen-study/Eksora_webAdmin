@@ -103,12 +103,7 @@ function SideNav() {
             <p>Bookings</p>
           </Link>
         </li>
-        <li className="nav-item">
-          <Link to="/calendar" className="nav-link" style={location.pathname.startsWith('/calendar') ? { background: '#3f6791', color: '#fff' } : {}}>
-            <i className="nav-icon far fa-calendar-alt" style={location.pathname.startsWith('/calendar') ? { color: '#fff' } : {}}></i>
-            <p>Calendar</p>
-          </Link>
-        </li>
+       
       </ul>
     </nav>
   </div>
