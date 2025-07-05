@@ -436,6 +436,15 @@ function Tour() {
                         <b>Tỉnh/Thành:</b> <span className="ml-1">{selectedTour.province}</span>
                       </div>
                       <div className="col-md-6 mb-2">
+                        <b>Đánh giá:</b> <span className="ml-1">{selectedTour.rating ? `${selectedTour.rating} ★` : 'Chưa có'}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Giờ mở cửa:</b> <span className="ml-1">{selectedTour.opening_time || selectedTour.open_time || 'N/A'}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Giờ đóng cửa:</b> <span className="ml-1">{selectedTour.closing_time || selectedTour.close_time || 'N/A'}</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
                         <b>Trạng thái:</b> <span className="ml-1">{selectedTour.status === 'active' ? 'Active' : 'Deactive'}</span>
                       </div>
                     </div>

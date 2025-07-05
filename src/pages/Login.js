@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginWithEmail, getUser } from '../api/api';
+import Swal from 'sweetalert2';
 import './Login.css';
 
-function Login() {
+function Login(props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [remember, setRemember] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   // Nếu đã đăng nhập thì không hiển thị trang Login nữa, tự động chuyển hướng
@@ -60,6 +62,18 @@ function Login() {
             sessionStorage.setItem('isLoggedIn', 'true');
           }
           window.sessionStorage.setItem('justLoggedIn', '1');
+          // Gọi callback để App re-render ngay khi đăng nhập thành công
+          if (props.onLoginSuccess) props.onLoginSuccess();
+          // SweetAlert2 Success Toast
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'success',
+            title: 'Đăng nhập thành công!',
+            showConfirmButton: false,
+            timer: 1500,
+            timerProgressBar: true,
+          });
           navigate('/dashboard');
         } else {
           setError('Chỉ tài khoản Admin mới được đăng nhập!');
@@ -92,9 +106,19 @@ function Login() {
                 </div>
               </div>
               <div className="input-group mb-3">
-                <input type="password" className="form-control" placeholder="Mật khẩu" value={password} onChange={e => setPassword(e.target.value)} required style={{ fontSize: 16 }} />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="form-control"
+                  placeholder="Mật khẩu"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  style={{ fontSize: 16 }}
+                />
                 <div className="input-group-append">
-                  <div className="input-group-text"><span className="fas fa-lock"></span></div>
+                  <div className="input-group-text" style={{ cursor: 'pointer' }} onClick={() => setShowPassword(v => !v)}>
+                    <span className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></span>
+                  </div>
                 </div>
               </div>
               <div className="d-flex align-items-center mb-2">

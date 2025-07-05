@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { launchErrorToast } from '../components/ErrorToast';
 
 const AxiosInstance = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL,
@@ -213,7 +214,7 @@ export const createTour = async (tourData) => {
     const response = await AxiosInstance.post('/api/tours', tourData);
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi tạo tour:', error);
+    launchErrorToast('Lỗi khi tạo tour!');
     throw error;
   }
 };
@@ -221,10 +222,10 @@ export const createTour = async (tourData) => {
 // API cập nhật tour theo id
 export const updateTour = async (_id, tourData) => {
   try {
-    const response = await AxiosInstance.put(`/api/${_id}`, tourData);
+    const response = await AxiosInstance.put(`/api/tours/${_id}`, tourData);
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi cập nhật tour:', error);
+    launchErrorToast('Lỗi khi cập nhật tour!');
     throw error;
   }
 };

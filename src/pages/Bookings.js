@@ -332,6 +332,7 @@ function Bookings() {
                     <tr><td><b>Tổng tiền:</b></td><td>{selectedBooking.totalPrice?.toLocaleString()} VNĐ</td></tr>
                     <tr><td><b>Trạng thái:</b></td><td>{selectedBooking.status === 'pending' ? 'Chưa thanh toán' : selectedBooking.status === 'confirmed' ? 'Đã xác nhận' : selectedBooking.status === 'success' ? 'Đã thanh toán' : selectedBooking.status === 'cancelled' ? 'Đã hủy' : selectedBooking.status}</td></tr>
                     <tr><td><b>Mã thanh toán:</b></td><td>{selectedBooking.order_code || 'N/A'}</td></tr>
+                    <tr><td><b>Lần cập nhật trạng thái gần nhất:</b></td><td>{selectedBooking.last_update ? new Date(selectedBooking.last_update).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}</td></tr>
                   </tbody>
                 </table>
                 <hr />
@@ -346,7 +347,7 @@ function Bookings() {
                   <div>
                     <i className="fas fa-edit bg-blue"></i>
                     <div className="timeline-item">
-                      <span className="time"><i className="fas fa-clock"></i> {selectedBooking.booking_date ? new Date(selectedBooking.booking_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}</span>
+                      <span className="time"><i className="fas fa-clock"></i> {selectedBooking.booking_date ? new Date(selectedBooking.booking_date).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
                       <h3 className="timeline-header">Đặt tour</h3>
                     </div>
                   </div>
@@ -355,7 +356,10 @@ function Bookings() {
                     <div>
                       <i className="fas fa-check bg-info"></i>
                       <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.confirmedAt ? new Date(selectedBooking.confirmedAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.last_update && selectedBooking.status === 'confirmed'
+                          ? new Date(selectedBooking.last_update).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+                          : (selectedBooking.confirmedAt ? new Date(selectedBooking.confirmedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '')}
+                        </span>
                         <h3 className="timeline-header">Đã xác nhận</h3>
                       </div>
                     </div>
@@ -365,7 +369,10 @@ function Bookings() {
                     <div>
                       <i className="fas fa-credit-card bg-primary"></i>
                       <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.paidAt ? new Date(selectedBooking.paidAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.last_update && selectedBooking.status === 'paid'
+                          ? new Date(selectedBooking.last_update).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+                          : (selectedBooking.paidAt ? new Date(selectedBooking.paidAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '')}
+                        </span>
                         <h3 className="timeline-header">Đã thanh toán</h3>
                       </div>
                     </div>
@@ -375,7 +382,7 @@ function Bookings() {
                     <div>
                       <i className="fas fa-play bg-success"></i>
                       <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.ongoingAt ? new Date(selectedBooking.ongoingAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.ongoingAt ? new Date(selectedBooking.ongoingAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
                         <h3 className="timeline-header">Tour đang diễn ra</h3>
                       </div>
                     </div>
@@ -385,7 +392,7 @@ function Bookings() {
                     <div>
                       <i className="fas fa-flag-checkered bg-success"></i>
                       <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.completedAt ? new Date(selectedBooking.completedAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.completedAt ? new Date(selectedBooking.completedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
                         <h3 className="timeline-header">Đã hoàn thành</h3>
                       </div>
                     </div>
@@ -395,28 +402,8 @@ function Bookings() {
                     <div>
                       <i className="fas fa-times-circle bg-danger"></i>
                       <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.canceledAt ? new Date(selectedBooking.canceledAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.canceledAt ? new Date(selectedBooking.canceledAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
                         <h3 className="timeline-header">Đã hủy</h3>
-                      </div>
-                    </div>
-                  )}
-                  {/* Quá hạn thanh toán (expired) */}
-                  {selectedBooking.isExpired && (
-                    <div>
-                      <i className="fas fa-hourglass-end bg-secondary"></i>
-                      <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.expiredAt ? new Date(selectedBooking.expiredAt).toLocaleTimeString('vi-VN') : ''}</span>
-                        <h3 className="timeline-header">Quá hạn thanh toán</h3>
-                      </div>
-                    </div>
-                  )}
-                  {/* Yêu cầu hoàn tiền (refund_requested) */}
-                  {selectedBooking.canRefundRequest && (
-                    <div>
-                      <i className="fas fa-undo bg-warning"></i>
-                      <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.refundRequestedAt ? new Date(selectedBooking.refundRequestedAt).toLocaleTimeString('vi-VN') : ''}</span>
-                        <h3 className="timeline-header">Yêu cầu hoàn tiền (đủ điều kiện)</h3>
                       </div>
                     </div>
                   )}
@@ -425,10 +412,45 @@ function Bookings() {
                     <div>
                       <i className="fas fa-money-bill-wave bg-success"></i>
                       <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.refundedAt ? new Date(selectedBooking.refundedAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.refundedAt ? new Date(selectedBooking.refundedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
                         <h3 className="timeline-header">Đã hoàn tiền</h3>
                       </div>
                     </div>
+                  )}
+                  {/* Các trạng thái khác chỉ hiển thị nếu chưa hoàn thành, chưa hủy, chưa refund */}
+                  {!(selectedBooking.status === 'completed' || selectedBooking.status === 'canceled' || selectedBooking.status === 'cancelled' || selectedBooking.status === 'refunded') && (
+                    <>
+                      {/* Đang diễn ra */}
+                      {selectedBooking.status === 'ongoing' && (
+                        <div>
+                          <i className="fas fa-play bg-success"></i>
+                          <div className="timeline-item">
+                            <span className="time"><i className="fas fa-clock"></i> {selectedBooking.ongoingAt ? new Date(selectedBooking.ongoingAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
+                            <h3 className="timeline-header">Tour đang diễn ra</h3>
+                          </div>
+                        </div>
+                      )}
+                      {/* Quá hạn thanh toán (expired) */}
+                      {selectedBooking.isExpired && (
+                        <div>
+                          <i className="fas fa-hourglass-end bg-secondary"></i>
+                          <div className="timeline-item">
+                            <span className="time"><i className="fas fa-clock"></i> {selectedBooking.expiredAt ? new Date(selectedBooking.expiredAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
+                            <h3 className="timeline-header">Quá hạn thanh toán</h3>
+                          </div>
+                        </div>
+                      )}
+                      {/* Yêu cầu hoàn tiền (refund_requested) */}
+                      {selectedBooking.canRefundRequest && (
+                        <div>
+                          <i className="fas fa-undo bg-warning"></i>
+                          <div className="timeline-item">
+                            <span className="time"><i className="fas fa-clock"></i> {selectedBooking.refundRequestedAt ? new Date(selectedBooking.refundRequestedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}</span>
+                            <h3 className="timeline-header">Yêu cầu hoàn tiền (đủ điều kiện)</h3>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
