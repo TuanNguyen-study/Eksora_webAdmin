@@ -1,0 +1,30 @@
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #f4f6f9;
+}
+.login-box {
+  width: 360px;
+  margin: 7% auto;
+}
+.login-logo {
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+.login-card-body {
+  padding: 1.5rem;
+}
+.btn-primary.btn-block {
+  width: 100%;
+}
+.input-group-text {
+  background: #fff;
+}
+.icheck-primary label {
+  margin-left: 5px;
+  font-weight: 400;
+}

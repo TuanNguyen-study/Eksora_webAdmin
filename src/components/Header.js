@@ -144,14 +144,13 @@ function Header() {
         <i className="fas fa-expand-arrows-alt" />
       </a>
     </li>
-    
     <button className="btn btn-outline-secondary ml-2" onClick={handleToggleTheme} title="Toggle Light/Dark Mode">
-        {isDark ? (
-          <i className="fas fa-sun"></i>
-        ) : (
-          <i className="fas fa-moon"></i>
-        )}
-      </button>
+      {isDark ? (
+        <i className="fas fa-sun"></i>
+      ) : (
+        <i className="fas fa-moon"></i>
+      )}
+    </button>
   </ul>
 </nav>
 {/* /.navbar */}

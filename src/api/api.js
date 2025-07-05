@@ -240,3 +240,36 @@ export const getSuppliers = async () => {
   }
 };
 
+// API lấy danh sách reviews
+export const getReviews = async () => {
+  try {
+    const response = await AxiosInstance.get('/api/reviews');
+    return response.data;
+  } catch (error) {
+    console.error('Lỗi khi lấy danh sách reviews:', error);
+    throw error;
+  }
+};
+
+// API đăng nhập bằng email
+export const loginWithEmail = async (email, password) => {
+  try {
+    const response = await AxiosInstance.post('/api/login-email', { email, password });
+    return response.data;
+  } catch (error) {
+    console.error('Lỗi khi đăng nhập:', error);
+    throw error;
+  }
+};
+
+// API thay đổi trạng thái booking
+export const updateBookingStatus = async (bookingId, status) => {
+  try {
+    const response = await AxiosInstance.put(`/api/bookings/${bookingId}`, { status });
+    return response.data;
+  } catch (error) {
+    console.error('Lỗi khi cập nhật trạng thái booking:', error);
+    throw error;
+  }
+};
+

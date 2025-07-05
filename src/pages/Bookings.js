@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getAllBookings } from '../api/api';
+import { getAllBookings, updateBookingStatus } from '../api/api';
 
 function Bookings() {
   const [userId, setUserId] = useState('');
@@ -86,28 +86,75 @@ function Bookings() {
   };
 
   const handleViewBooking = (booking) => {
-    // Kiểm tra nếu đã qua ngày đi mà vẫn chưa thanh toán thì cập nhật trạng thái và thêm mốc timeline
     const today = new Date();
     const travelDate = booking.travel_date ? new Date(booking.travel_date) : null;
+    const bookingDate = booking.booking_date ? new Date(booking.booking_date) : null;
+    const createdAt = booking.created_at ? new Date(booking.created_at) : bookingDate;
     let updatedBooking = { ...booking };
     let showUnpaidTimeline = false;
 
+    // --- Logic cho trạng thái expired ---
+    let isExpired = false;
     if (
       booking.status === 'pending' &&
-      travelDate &&
-      today > travelDate
+      createdAt &&
+      (today - createdAt) > 24 * 60 * 60 * 1000 // quá 24h
     ) {
-      updatedBooking = {
-        ...booking,
-        status: 'cancelled', // cập nhật trạng thái
-        wasUnpaid: true, // flag để hiển thị mốc timeline "Chưa thanh toán"
-      };
-      showUnpaidTimeline = true;
+      isExpired = true;
+      updatedBooking.status = 'expired';
+      updatedBooking.expiredAt = today;
     }
 
-    setSelectedBooking({ ...updatedBooking, showUnpaidTimeline });
+    // --- Logic cho trạng thái refund_requested ---
+    let canRefundRequest = false;
+    let refundRequestReason = '';
+    if (
+      (booking.status === 'canceled' || booking.status === 'cancelled') &&
+      booking.paid === true &&
+      travelDate && travelDate > today &&
+      travelDate && Math.floor((travelDate - today) / (24 * 60 * 60 * 1000)) >= 7
+    ) {
+      canRefundRequest = true;
+      updatedBooking.refundRequestedAt = today;
+    }
+
+    setSelectedBooking({
+      ...updatedBooking,
+      showUnpaidTimeline,
+      isExpired,
+      canRefundRequest,
+    });
     setShowModal(true);
   };
+
+  // Hàm xác nhận booking
+  const handleConfirmBooking = async (booking) => {
+    try {
+      await updateBookingStatus(booking._id, 'confirmed');
+      // Cập nhật lại danh sách bookings
+      const data = await getAllBookings();
+      setBookings(data);
+      setAllBookings(data);
+      if (selectedBooking && selectedBooking._id === booking._id) {
+        setSelectedBooking({ ...selectedBooking, status: 'confirmed' });
+      }
+    } catch (err) {
+      alert('Lỗi khi xác nhận booking!');
+    }
+  };
+
+  // Tự động chuyển trạng thái thành canceled nếu đã qua ngày tour
+  useEffect(() => {
+    const now = new Date();
+    bookings.forEach(async (b) => {
+      if (b.status === 'pending' && b.travel_date && new Date(b.travel_date) < now) {
+        try {
+          await updateBookingStatus(b._id, 'canceled');
+        } catch {}
+      }
+    });
+    // eslint-disable-next-line
+  }, [bookings]);
 
   // Pagination logic
   const indexOfLastBooking = currentPage * bookingsPerPage;
@@ -202,6 +249,7 @@ function Bookings() {
                       <th>Thành Tiền</th>
                       <th>Trạng thái</th>
                       <th>Hành động</th>
+                      <th>Xác nhận</th> {/* Thêm cột mới cho Confirm */}
                     </tr>
                   </thead>
                   <tbody>
@@ -216,14 +264,19 @@ function Bookings() {
                         <td>{b.services ? b.services.join(', ') : 'N/A'}</td>
                         <td>{b.totalPrice?.toLocaleString('vi-VN')} đ</td>
                         <td>
-                          <span className={`badge badge-${b.status === 'pending' ? 'warning' : b.status === 'success' ? 'success' : 'secondary'}`}>
-                            {b.status === 'pending' ? 'Chưa thanh toán' : b.status}
+                          <span className={`badge badge-${b.status === 'pending' ? 'warning' : b.status === 'confirmed' ? 'info' : b.status === 'paid' ? 'primary' : b.status === 'ongoing' ? 'success' : b.status === 'completed' ? 'success' : b.status === 'canceled' ? 'danger' : b.status === 'expired' ? 'secondary' : 'secondary'}`}>
+                            {b.status}
                           </span>
                         </td>
                         <td>
-                          <button onClick={() => handleViewBooking(b)} className="btn btn-info btn-sm" title="Xem chi tiết">
-                            <i className="fas fa-eye"></i>
+                          <button onClick={() => handleViewBooking(b)} className="btn btn-info btn-sm mr-1" title="Xem chi tiết">
+                            Xem chi tiết
                           </button>
+                        </td>
+                        <td>
+                          {b.status === 'pending' && (
+                            <button onClick={() => handleConfirmBooking(b)} className="btn btn-success btn-sm">Confirm</button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -277,12 +330,14 @@ function Bookings() {
                     <tr><td><b>Số lượng người lớn:</b></td><td>{selectedBooking.quantity_nguoiLon}</td></tr>
                     <tr><td><b>Số lượng trẻ em:</b></td><td>{selectedBooking.quantity_treEm}</td></tr>
                     <tr><td><b>Tổng tiền:</b></td><td>{selectedBooking.totalPrice?.toLocaleString()} VNĐ</td></tr>
-                    <tr><td><b>Trạng thái:</b></td><td>{selectedBooking.status === 'pending' ? 'Chưa thanh toán' : selectedBooking.status === 'success' ? 'Đã thanh toán' : selectedBooking.status === 'cancelled' ? 'Đã hủy' : selectedBooking.status}</td></tr>
+                    <tr><td><b>Trạng thái:</b></td><td>{selectedBooking.status === 'pending' ? 'Chưa thanh toán' : selectedBooking.status === 'confirmed' ? 'Đã xác nhận' : selectedBooking.status === 'success' ? 'Đã thanh toán' : selectedBooking.status === 'cancelled' ? 'Đã hủy' : selectedBooking.status}</td></tr>
+                    <tr><td><b>Mã thanh toán:</b></td><td>{selectedBooking.order_code || 'N/A'}</td></tr>
                   </tbody>
                 </table>
                 <hr />
                 <h5 className="mb-3"><i className="fas fa-stream mr-2"></i>Lịch sử booking</h5>
                 <div className="timeline">
+                  {/* Đặt tour */}
                   <div className="time-label">
                     <span className="bg-primary">
                       {selectedBooking.booking_date ? new Date(selectedBooking.booking_date).toLocaleDateString('vi-VN') : ''}
@@ -295,40 +350,86 @@ function Bookings() {
                       <h3 className="timeline-header">Đặt tour</h3>
                     </div>
                   </div>
-                  <div>
-                    <i className="fas fa-credit-card bg-yellow"></i>
-                    <div className="timeline-item">
-                      <span className="time"><i className="fas fa-clock"></i> {selectedBooking.booking_date ? new Date(selectedBooking.booking_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}</span>
-                      <h3 className="timeline-header">
-                        {selectedBooking.status === 'pending' && 'Chờ thanh toán'}
-                        {selectedBooking.status === 'success' && 'Đã thanh toán'}
-                        {selectedBooking.status === 'cancelled' && selectedBooking.showUnpaidTimeline && 'Chưa thanh toán'}
-                        {selectedBooking.status === 'cancelled' && !selectedBooking.showUnpaidTimeline && 'Đã hủy'}
-                        {selectedBooking.status !== 'pending' && selectedBooking.status !== 'success' && selectedBooking.status !== 'cancelled' && selectedBooking.status}
-                      </h3>
-                    </div>
-                  </div>
-                  {/* Nếu là hủy do chưa thanh toán, thêm mốc timeline "Chưa thanh toán" */}
-                  {selectedBooking.showUnpaidTimeline && (
+                  {/* Đã xác nhận */}
+                  {selectedBooking.status === 'confirmed' && (
                     <div>
-                      <i className="fas fa-times-circle bg-danger"></i>
+                      <i className="fas fa-check bg-info"></i>
                       <div className="timeline-item">
-                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.travel_date ? new Date(selectedBooking.travel_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}</span>
-                        <h3 className="timeline-header">Chưa thanh toán - Đơn đã bị hủy</h3>
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.confirmedAt ? new Date(selectedBooking.confirmedAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Đã xác nhận</h3>
                       </div>
                     </div>
                   )}
-                  <div>
-                    <i className={`fas fa-check-circle ${selectedBooking.status === 'success' ? 'bg-green' : selectedBooking.status === 'cancelled' ? 'bg-danger' : 'bg-gray'}`}></i>
-                    <div className="timeline-item">
-                      <span className="time"><i className="fas fa-clock"></i> {selectedBooking.booking_date ? new Date(selectedBooking.booking_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}</span>
-                      <h3 className="timeline-header">
-                        {selectedBooking.status === 'success' && 'Hoàn thành'}
-                        {selectedBooking.status === 'cancelled' && 'Đã hủy'}
-                        {selectedBooking.status !== 'success' && selectedBooking.status !== 'cancelled' && 'Chưa hoàn thành'}
-                      </h3>
+                  {/* Đã thanh toán */}
+                  {selectedBooking.status === 'paid' && (
+                    <div>
+                      <i className="fas fa-credit-card bg-primary"></i>
+                      <div className="timeline-item">
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.paidAt ? new Date(selectedBooking.paidAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Đã thanh toán</h3>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {/* Đang diễn ra */}
+                  {selectedBooking.status === 'ongoing' && (
+                    <div>
+                      <i className="fas fa-play bg-success"></i>
+                      <div className="timeline-item">
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.ongoingAt ? new Date(selectedBooking.ongoingAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Tour đang diễn ra</h3>
+                      </div>
+                    </div>
+                  )}
+                  {/* Đã hoàn thành */}
+                  {selectedBooking.status === 'completed' && (
+                    <div>
+                      <i className="fas fa-flag-checkered bg-success"></i>
+                      <div className="timeline-item">
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.completedAt ? new Date(selectedBooking.completedAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Đã hoàn thành</h3>
+                      </div>
+                    </div>
+                  )}
+                  {/* Đã hủy */}
+                  {(selectedBooking.status === 'canceled' || selectedBooking.status === 'cancelled') && (
+                    <div>
+                      <i className="fas fa-times-circle bg-danger"></i>
+                      <div className="timeline-item">
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.canceledAt ? new Date(selectedBooking.canceledAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Đã hủy</h3>
+                      </div>
+                    </div>
+                  )}
+                  {/* Quá hạn thanh toán (expired) */}
+                  {selectedBooking.isExpired && (
+                    <div>
+                      <i className="fas fa-hourglass-end bg-secondary"></i>
+                      <div className="timeline-item">
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.expiredAt ? new Date(selectedBooking.expiredAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Quá hạn thanh toán</h3>
+                      </div>
+                    </div>
+                  )}
+                  {/* Yêu cầu hoàn tiền (refund_requested) */}
+                  {selectedBooking.canRefundRequest && (
+                    <div>
+                      <i className="fas fa-undo bg-warning"></i>
+                      <div className="timeline-item">
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.refundRequestedAt ? new Date(selectedBooking.refundRequestedAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Yêu cầu hoàn tiền (đủ điều kiện)</h3>
+                      </div>
+                    </div>
+                  )}
+                  {/* Đã hoàn tiền */}
+                  {selectedBooking.status === 'refunded' && (
+                    <div>
+                      <i className="fas fa-money-bill-wave bg-success"></i>
+                      <div className="timeline-item">
+                        <span className="time"><i className="fas fa-clock"></i> {selectedBooking.refundedAt ? new Date(selectedBooking.refundedAt).toLocaleTimeString('vi-VN') : ''}</span>
+                        <h3 className="timeline-header">Đã hoàn tiền</h3>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="modal-footer">
