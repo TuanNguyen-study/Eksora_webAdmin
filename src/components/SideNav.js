@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import SideNavReviewsCount from './SideNavReviewsCount';
 
 function SideNav({ onLogoutClick }) {
@@ -7,6 +7,24 @@ function SideNav({ onLogoutClick }) {
   const isDashboardActive = location.pathname === '/dashboard ' || location.pathname === '/';
   const isCategoryActive = location.pathname.startsWith('/tour') || location.pathname.startsWith('/vouchers');
 
+  // Detect sidebar mini mode
+  const [isSidebarMini, setIsSidebarMini] = useState(false);
+  useEffect(() => {
+    const checkSidebarMini = () => {
+      // Nếu body có sidebar-mini và chiều rộng sidebar nhỏ hơn 80px thì là mini
+      const sidebar = document.querySelector('.main-sidebar');
+      const isMini = document.body.classList.contains('sidebar-mini') && sidebar && sidebar.offsetWidth < 100;
+      setIsSidebarMini(isMini);
+    };
+    checkSidebarMini();
+    window.addEventListener('resize', checkSidebarMini);
+    const observer = new MutationObserver(checkSidebarMini);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => {
+      window.removeEventListener('resize', checkSidebarMini);
+      observer.disconnect();
+    };
+  }, []);
 
   return (
     <div>
@@ -109,10 +127,15 @@ function SideNav({ onLogoutClick }) {
               {/* Nút Đăng xuất */}
               <li className="nav-item mt-3">
                 <button
-                  className="btn btn-outline-danger btn-block"
+                  className="btn btn-outline-danger btn-block d-flex align-items-center justify-content-center"
                   onClick={onLogoutClick}
+                  style={{ minHeight: 40 }}
                 >
-                  <i className="fas fa-sign-out-alt mr-1"></i> Đăng xuất
+                  {isSidebarMini ? (
+                    <i className="fas fa-sign-out-alt"></i>
+                  ) : (
+                    <><i className="fas fa-sign-out-alt mr-1"></i> Đăng xuất</>
+                  )}
                 </button>
               </li>
             </ul>

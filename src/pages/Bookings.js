@@ -12,6 +12,8 @@ function Bookings() {
   const [showModal, setShowModal] = useState(false);
   const [searchName, setSearchName] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [productTypeFilter, setProductTypeFilter] = useState('all');
   const bookingsPerPage = 10;
 
   useEffect(() => {
@@ -30,6 +32,59 @@ function Bookings() {
     }
     fetchData();
   }, []);
+
+  // Hàm lọc tổng hợp
+  useEffect(() => {
+    let filtered = allBookings;
+    // Lọc theo tên người đặt
+    if (searchName.trim()) {
+      filtered = filtered.filter(b => {
+        const fullName = `${b.user_id?.first_name || ''} ${b.user_id?.last_name || ''}`.toLowerCase();
+        return fullName.includes(searchName.trim().toLowerCase());
+      });
+    }
+    // Lọc theo ngày đặt
+    if (dateFilter !== 'all') {
+      const today = new Date();
+      filtered = filtered.filter(b => {
+        if (!b.booking_date) return false;
+        const bookingDate = new Date(b.booking_date);
+        if (dateFilter === 'today') {
+          return (
+            bookingDate.getDate() === today.getDate() &&
+            bookingDate.getMonth() === today.getMonth() &&
+            bookingDate.getFullYear() === today.getFullYear()
+          );
+        }
+        if (dateFilter === 'month') {
+          return (
+            bookingDate.getMonth() === today.getMonth() &&
+            bookingDate.getFullYear() === today.getFullYear()
+          );
+        }
+        if (dateFilter === 'year') {
+          return bookingDate.getFullYear() === today.getFullYear();
+        }
+        return true;
+      });
+    }
+    // Lọc theo trạng thái
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(b => b.status === statusFilter);
+    }
+    // Lọc theo loại sản phẩm
+    if (productTypeFilter !== 'all') {
+      filtered = filtered.filter(b => {
+        if (productTypeFilter === 'tour') return b.tour_id;
+        if (productTypeFilter === 'hotel') return b.hotel_id;
+        if (productTypeFilter === 'flight') return b.flight_id;
+        return true;
+      });
+    }
+    setBookings(filtered);
+    setCurrentPage(1);
+    // eslint-disable-next-line
+  }, [searchName, dateFilter, statusFilter, productTypeFilter, allBookings]);
 
   const handleSearch = () => {
     if (!searchName.trim()) {
@@ -77,6 +132,21 @@ function Bookings() {
         if (dateFilter === 'year') {
           return bookingDate.getFullYear() === today.getFullYear();
         }
+        return true;
+      });
+    }
+
+    // Lọc theo trạng thái
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(b => b.status === statusFilter);
+    }
+
+    // Lọc theo loại sản phẩm
+    if (productTypeFilter !== 'all') {
+      filtered = filtered.filter(b => {
+        if (productTypeFilter === 'tour') return b.tour_id;
+        if (productTypeFilter === 'hotel') return b.hotel_id;
+        if (productTypeFilter === 'flight') return b.flight_id;
         return true;
       });
     }
@@ -156,6 +226,24 @@ function Bookings() {
     // eslint-disable-next-line
   }, [bookings]);
 
+  // Tính tổng doanh thu từ các booking đã thanh toán
+  const totalRevenue = allBookings
+    .filter(b => ['paid', 'completed', 'refunded'].includes(b.status))
+    .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+
+  // Tính tổng số booking và tổng doanh thu đã thanh toán trong tháng/năm hiện tại
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const bookingsInMonth = allBookings.filter(b => {
+    const d = new Date(b.createdAt || b.booking_date);
+    return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+  });
+  const totalBookingMonth = bookingsInMonth.length;
+  const totalRevenueMonth = bookingsInMonth
+    .filter(b => ['paid', 'completed', 'refunded'].includes(b.status))
+    .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+
   // Pagination logic
   const indexOfLastBooking = currentPage * bookingsPerPage;
   const indexOfFirstBooking = indexOfLastBooking - bookingsPerPage;
@@ -177,6 +265,17 @@ function Bookings() {
               </ol>
             </div>
           </div>
+          {/* Tổng số booking và doanh thu tháng này */}
+          <div className="row mb-2">
+            <div className="col-md-6">
+              <span className="badge badge-info" style={{fontSize: '1.1rem'}}>
+                Tổng số Booking tháng này: {totalBookingMonth}
+              </span>
+              <span className="badge badge-warning ml-2" style={{fontSize: '1.1rem'}}>
+                Tổng doanh thu: {totalRevenueMonth.toLocaleString('vi-VN')} VNĐ
+              </span>
+            </div>
+          </div>
         </div>
       </div>
       <section className="content">
@@ -184,11 +283,23 @@ function Bookings() {
           {/* Bộ lọc giống ảnh minh họa */}
           <div className="mb-3 d-flex flex-wrap align-items-center gap-2">
             <div>
-              <span className="mr-2 font-weight-bold" style={{ color: '#212529' }}>Tất cả ({allBookings.length})</span>
-              <a href="#" className="mr-2" style={{ color: '#0073aa' }}>Của tôi (0)</a>
-              <a href="#" className="mr-2" style={{ color: '#0073aa' }}>Hoàn thành (0)</a>
-              <a href="#" className="mr-2" style={{ color: '#0073aa' }}>Paid &amp; Confirmed (0)</a>
-              <a href="#" className="mr-2" style={{ color: '#0073aa' }}>Un-paid (0)</a>
+              <select
+                className="form-control form-control-sm mr-2"
+                style={{ width: 220, display: 'inline-block' }}
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+              >
+                <option value="all">Tất cả trạng thái ({allBookings.length})</option>
+                <option value="pending">Chờ xác nhận ({allBookings.filter(b=>b.status==='pending').length})</option>
+                <option value="confirmed">Đã xác nhận ({allBookings.filter(b=>b.status==='confirmed').length})</option>
+                <option value="paid">Đã thanh toán ({allBookings.filter(b=>b.status==='paid').length})</option>
+                <option value="ongoing">Đang diễn ra ({allBookings.filter(b=>b.status==='ongoing').length})</option>
+                <option value="completed">Hoàn thành ({allBookings.filter(b=>b.status==='completed').length})</option>
+                <option value="canceled">Đã hủy ({allBookings.filter(b=>b.status==='canceled'||b.status==='cancelled').length})</option>
+                <option value="refund_requested">Yêu cầu hoàn tiền ({allBookings.filter(b=>b.status==='refund_requested').length})</option>
+                <option value="refunded">Đã hoàn tiền ({allBookings.filter(b=>b.status==='refunded').length})</option>
+                <option value="expired">Quá hạn ({allBookings.filter(b=>b.status==='expired').length})</option>
+              </select>
             </div>
             <select className="form-control form-control-sm mx-1" style={{ width: 120 }}>
               <option>Tác vụ</option>
@@ -207,18 +318,12 @@ function Bookings() {
               <option value="month">Tháng này</option>
               <option value="year">Năm nay</option>
             </select>
-            <select className="form-control form-control-sm mx-1" style={{ width: 180 }}>
-              <option>Tất cả sản phẩm đặt được</option>
-              <option>Tour</option>
-              <option>Khách sạn</option>
-              <option>Vé máy bay</option>
+            <select className="form-control form-control-sm mx-1" style={{ width: 180 }} value={productTypeFilter} onChange={e => setProductTypeFilter(e.target.value)}>
+              <option value="all">Tất cả sản phẩm đặt được</option>
+              <option value="tour">Tour</option>
+              <option value="hotel">Khách sạn</option>
+              <option value="flight">Vé máy bay</option>
             </select>
-            <button
-              className="btn btn-outline-secondary btn-sm mx-1"
-              onClick={handleFilter}
-            >
-              Lọc
-            </button>
           </div>
           <div className="mb-3">
             <input
@@ -264,8 +369,19 @@ function Bookings() {
                         <td>{b.services ? b.services.join(', ') : 'N/A'}</td>
                         <td>{b.totalPrice?.toLocaleString('vi-VN')} đ</td>
                         <td>
-                          <span className={`badge badge-${b.status === 'pending' ? 'warning' : b.status === 'confirmed' ? 'info' : b.status === 'paid' ? 'primary' : b.status === 'ongoing' ? 'success' : b.status === 'completed' ? 'success' : b.status === 'canceled' ? 'danger' : b.status === 'expired' ? 'secondary' : 'secondary'}`}>
-                            {b.status}
+                          <span className={`badge badge-${b.status === 'pending' ? 'warning' : b.status === 'confirmed' ? 'info' : b.status === 'paid' ? 'primary' : b.status === 'ongoing' ? 'success' : b.status === 'completed' ? 'success' : b.status === 'canceled' || b.status === 'cancelled' ? 'danger' : b.status === 'refund_requested' ? 'warning' : b.status === 'refunded' ? 'info' : b.status === 'expired' ? 'secondary' : 'secondary'}`}>
+                            {
+                              b.status === 'pending' ? 'Chờ xác nhận' :
+                              b.status === 'confirmed' ? 'Đã xác nhận' :
+                              b.status === 'paid' ? 'Đã thanh toán' :
+                              b.status === 'ongoing' ? 'Đang diễn ra' :
+                              b.status === 'completed' ? 'Hoàn thành' :
+                              b.status === 'canceled' || b.status === 'cancelled' ? 'Đã hủy' :
+                              b.status === 'refund_requested' ? 'Yêu cầu hoàn tiền' :
+                              b.status === 'refunded' ? 'Đã hoàn tiền' :
+                              b.status === 'expired' ? 'Quá hạn' :
+                              b.status
+                            }
                           </span>
                         </td>
                         <td>

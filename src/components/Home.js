@@ -2,21 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { getTours, getAllBookings, getAllUsers, getReviews } from '../api/api';
 import Calendar from '../pages/Calendar';
 import LastestReview from './LastestReview';
-import { Bar } from 'react-chartjs-2';
-import { Chart, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-Chart.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+import { Line } from 'react-chartjs-2';
+import { Chart, BarElement, CategoryScale, LinearScale, Tooltip, Legend, PointElement, LineElement } from 'chart.js';
+Chart.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend, PointElement, LineElement);
 const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=dee2e6&color=495057&size=128';
 
 function Home() {
   const [recentTours, setRecentTours] = useState([]);
   const [totalTours, setTotalTours] = useState(0);
-  const [totalReviews, setTotalReviews] = useState(0); // Thêm state tổng số review
+  const [totalReviews, setTotalReviews] = useState(0); 
   const [latestBookings, setLatestBookings] = useState([]);
   const [latestUsers, setLatestUsers] = useState([]);
   const [newMembersCount, setNewMembersCount] = useState(0);
   const [monthlyBookingStats, setMonthlyBookingStats] = useState({ labels: [], data: [] });
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [chartLoading, setChartLoading] = useState(false);
+  const [allBookings, setAllBookings] = useState([]);
+  const [totalRevenue, setTotalRevenue] = useState(0);
 
   useEffect(() => {
     async function fetchRecentTours() {
@@ -77,27 +80,91 @@ function Home() {
     fetchTotalReviews();
   }, []);
   useEffect(() => {
-    async function fetchMonthlyBookingStats() {
+    async function fetchAllBookings() {
+      setChartLoading(true);
       try {
         const data = await getAllBookings();
-        const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
-        // Trục y: 0, 10, 20, 40, 60
-        const yLabels = [0, 10, 20, 40, 60];
-        const labels = Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`);
-        const counts = Array(daysInMonth).fill(0);
-        data.forEach(b => {
-          const d = new Date(b.createdAt);
-          if (d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear) {
-            counts[d.getDate() - 1]++;
-          }
-        });
-        setMonthlyBookingStats({ labels, data: counts, yLabels });
-      } catch (err) {
-        setMonthlyBookingStats({ labels: [], data: [], yLabels: [] });
+        setAllBookings(data);
+        // Tính toán chart ở useEffect bên dưới
+      } catch {
+        setAllBookings([]);
+      } finally {
+        setChartLoading(false);
       }
     }
-    fetchMonthlyBookingStats();
-  }, [selectedMonth, selectedYear]);
+    fetchAllBookings();
+  }, []);
+  useEffect(() => {
+    // Tính toán chart từ allBookings
+    setChartLoading(true);
+    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+    const labels = Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`);
+    // Số lượng booking mới mỗi ngày (giữ lại nếu cần)
+    const bookingCounts = Array(daysInMonth).fill(0);
+    // Số lượng booking đang có tại mỗi ngày
+    const bookingActiveCounts = Array(daysInMonth).fill(0);
+    const revenueCounts = Array(daysInMonth).fill(0);
+    // Tính số lượng booking mới mỗi ngày
+    allBookings.forEach(b => {
+      const d = new Date(b.createdAt);
+      if (d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear) {
+        const dayIdx = d.getDate() - 1;
+        bookingCounts[dayIdx]++;
+        if (["paid","completed","refunded"].includes(b.status)) {
+          revenueCounts[dayIdx] += b.totalPrice || 0;
+        }
+      }
+    });
+    // Tính số lượng booking đang có tại mỗi ngày
+    for (let i = 0; i < daysInMonth; i++) {
+      const currentDate = new Date(selectedYear, selectedMonth - 1, i + 1);
+      bookingActiveCounts[i] = allBookings.filter(b => {
+        // Ngày bắt đầu booking
+        const start = new Date(b.booking_date || b.created_at);
+        // Ngày kết thúc booking
+        let end = null;
+        if (["canceled","expired"].includes(b.status) && b.last_update) {
+          end = new Date(b.last_update);
+        } else if (b.travel_date) {
+          end = new Date(b.travel_date);
+        } else if (b.tour_date) {
+          end = new Date(b.tour_date);
+        } else if (b.endDate) {
+          end = new Date(b.endDate);
+        } else {
+          end = start; // Nếu không có ngày kết thúc, chỉ tính ngày đặt
+        }
+        // Booking còn hiệu lực nếu: start <= currentDate <= end
+        return start <= currentDate && currentDate <= end;
+      }).length;
+    }
+    // Tính doanh thu theo ngày: tổng doanh thu của các booking có travel_date đúng ngày đó và đã thanh toán
+    for (let i = 0; i < daysInMonth; i++) {
+      const currentDate = new Date(selectedYear, selectedMonth - 1, i + 1);
+      revenueCounts[i] = allBookings.filter(b => {
+        // Ngày kết thúc booking (ưu tiên travel_date, tour_date, endDate)
+        let end = null;
+        if (b.travel_date) {
+          end = new Date(b.travel_date);
+        } else if (b.tour_date) {
+          end = new Date(b.tour_date);
+        } else if (b.endDate) {
+          end = new Date(b.endDate);
+        } else if (["paid","completed","refunded"].includes(b.status) && b.last_update) {
+          end = new Date(b.last_update);
+        }
+        // Chỉ tính doanh thu nếu trạng thái đã thanh toán và ngày kết thúc đúng ngày hiện tại
+        return end && end.getFullYear() === currentDate.getFullYear() && end.getMonth() === currentDate.getMonth() && end.getDate() === currentDate.getDate() && ["paid","completed","refunded"].includes(b.status);
+      }).reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+    }
+    setMonthlyBookingStats({ labels, bookingCounts, bookingActiveCounts, revenueCounts });
+    // Tính tổng doanh thu đã thanh toán toàn hệ thống
+    const totalRevenue = allBookings
+      .filter(b => ["paid","completed","refunded"].includes(b.status))
+      .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+    setTotalRevenue(totalRevenue);
+    setChartLoading(false);
+  }, [selectedMonth, selectedYear, allBookings]);
   return (
     <>
       {/* Content Wrapper. Contains page content */}
@@ -116,6 +183,8 @@ function Home() {
                 </ol>
               </div>{/* /.col */}
             </div>{/* /.row */}
+            {/* Tổng doanh thu đã thanh toán */}
+            
           </div>{/* /.container-fluid */}
         </div>
         {/* /.content-header */}
@@ -209,47 +278,92 @@ function Home() {
                           <strong>Booking trong tháng {selectedMonth}/{selectedYear}</strong>
                         </p>
                         <div className="chart">
-                          <Bar
-                            data={{
-                              labels: monthlyBookingStats.labels,
-                              datasets: [
-                                {
-                                  label: 'Bookings',
-                                  data: monthlyBookingStats.data,
-                                  backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                                  borderColor: 'rgba(54, 162, 235, 1)',
-                                  borderWidth: 1,
+                          {chartLoading ? (
+                            <div className="text-center py-5"><span>Đang tải biểu đồ...</span></div>
+                          ) : (
+                            <Line
+                              data={{
+                                labels: monthlyBookingStats.labels,
+                                datasets: [
+                                  {
+                                    label: 'Số booking đang có',
+                                    data: monthlyBookingStats.bookingActiveCounts,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 2,
+                                    pointRadius: 7,
+                                    pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                                    pointBorderColor: '#fff',
+                                    fill: false,
+                                    yAxisID: 'y',
+                                    tension: 0.2,
+                                    showLine: true,
+                                  },
+                                  {
+                                    label: 'Doanh thu (VNĐ)',
+                                    data: monthlyBookingStats.revenueCounts,
+                                    backgroundColor: 'rgba(255, 206, 86, 0.5)',
+                                    borderColor: 'rgba(255, 206, 86, 1)',
+                                    borderWidth: 2,
+                                    pointRadius: 0,
+                                    fill: false,
+                                    yAxisID: 'y1',
+                                    tension: 0.2,
+                                    showLine: true,
+                                  },
+                                ],
+                              }}
+                              options={{
+                                responsive: true,
+                                plugins: {
+                                  legend: { display: true },
+                                  tooltip: { enabled: true },
                                 },
-                              ],
-                            }}
-                            options={{
-                              responsive: true,
-                              plugins: {
-                                legend: { display: false },
-                                tooltip: { enabled: true },
-                              },
-                              scales: {
-                                x: { title: { display: true, text: 'Ngày trong tháng' } },
-                                y: {
-                                  title: { display: true, text: 'Số lượng Booking' },
-                                  beginAtZero: true,
-                                  ticks: {
-                                    stepSize: 10,
-                                    callback: function(value) {
-                                      // Hiển thị nhãn trục y: 0,10,20,40,60
-                                      if (monthlyBookingStats.yLabels && monthlyBookingStats.yLabels.includes(value)) return value;
-                                      if (value === 0) return value;
-                                      return '';
+                                scales: {
+                                  x: { title: { display: true, text: 'Ngày trong tháng' } },
+                                  y: {
+                                    title: { display: true, text: 'Số lượng Booking đang có' },
+                                    beginAtZero: true,
+                                    position: 'left',
+                                  },
+                                  y1: {
+                                    title: { display: true, text: 'Doanh thu (VNĐ)' },
+                                    beginAtZero: true,
+                                    position: 'right',
+                                    grid: { drawOnChartArea: false },
+                                    ticks: {
+                                      callback: function(value) {
+                                        return value.toLocaleString();
+                                      }
                                     }
-                                  }
+                                  },
                                 },
-                              },
-                            }}
-                            height={180}
-                          />
+                              }}
+                              height={180}
+                            />
+                          )}
                         </div>
                         <div className="text-center mt-2">
-                          <span className="badge badge-info" style={{fontSize: '1.1rem'}}>Tổng số Booking tháng này: {monthlyBookingStats.data.reduce((a, b) => a + b, 0)}</span>
+                          <span className="badge badge-info" style={{fontSize: '1.1rem'}}>
+                            Tổng số Booking tháng này: {(() => {
+                              // Lấy lại dữ liệu booking từ allBookings theo tháng/năm đang chọn
+                              const count = allBookings.filter(b => {
+                                const d = new Date(b.createdAt || b.booking_date);
+                                return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
+                              }).length;
+                              return count;
+                            })()}
+                          </span>
+                          <span className="badge badge-warning ml-2" style={{fontSize: '1.1rem'}}>
+                            Tổng doanh thu: {(() => {
+                              // Lấy lại doanh thu booking đã thanh toán theo tháng/năm đang chọn
+                              const sum = allBookings.filter(b => {
+                                const d = new Date(b.createdAt || b.booking_date);
+                                return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear && ["paid","completed","refunded"].includes(b.status);
+                              }).reduce((a, b) => a + (b.totalPrice || 0), 0);
+                              return sum.toLocaleString('vi-VN');
+                            })()} VNĐ
+                          </span>
                         </div>
                         {/* /.chart-responsive */}
                       </div>
@@ -301,8 +415,8 @@ function Home() {
                       <div className="col-sm-3 col-6">
                         <div className="description-block border-right">
                           <span className="description-percentage text-success"><i className="fas fa-caret-up" /> 17%</span>
-                          <h5 className="description-header">$35,210.43</h5>
-                          <span className="description-text">TOTAL REVENUE</span>
+                          <h5 className="description-header">{monthlyBookingStats.revenueCounts ? monthlyBookingStats.revenueCounts.reduce((a, b) => a + b, 0).toLocaleString('vi-VN') : 0} đ</h5>
+                          <span className="description-text">TỔNG DOANH THU THÁNG NÀY</span>
                         </div>
                         {/* /.description-block */}
                       </div>
@@ -480,7 +594,7 @@ function Home() {
                             <span className="product-title text-dark">{tour.name}
                               <span className="badge badge-primary float-right">{tour.price?.toLocaleString()} đ</span></span>
                             <span className="product-description text-secondary">
-                              {tour.description?.slice(0, 50)}{tour.description?.length > 50 ? '...' : ''}
+                              {tour.supplier_id?.name || tour.supplier_id || 'N/A'}
                             </span>
                           </div>
                         </li>
@@ -497,7 +611,6 @@ function Home() {
               </div>
               {/* /.col */}
             </div>
-           
           </div>{/*/. container-fluid */}
         </section>
         {/* /.content */}

@@ -264,17 +264,6 @@ function Tour() {
                       <option key={province} value={province}>{province}</option>
                     ))}
                   </select>
-                  <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} className="form-control w-auto mr-2">
-                    {[...Array(12)].map((_, i) => (
-                      <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>
-                    ))}
-                  </select>
-                  <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="form-control w-auto mr-2">
-                    {[...Array(6)].map((_, i) => {
-                      const year = new Date().getFullYear() - 3 + i;
-                      return <option key={year} value={year}>{year}</option>;
-                    })}
-                  </select>
                   {(selectedProvince || selectedCategory) && (
                     <button className="btn btn-outline-secondary btn-sm ml-2" onClick={() => { setSelectedProvince(''); setSelectedCategory(''); setCurrentPage(1); }}>Hiển thị tất cả tour</button>
                   )}
@@ -288,31 +277,6 @@ function Tour() {
                     <>
                       <div className={`card`}>
                         <div className="card-body">
-                          <div className="d-flex flex-wrap align-items-center mb-3">
-                            <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="form-control w-auto mr-2">
-                              <option value="">Tất cả danh mục</option>
-                              {categories.map(cate => (
-                                <option key={cate._id} value={cate._id}>{cate.name}</option>
-                              ))}
-                            </select>
-                            <select value={selectedProvince} onChange={e => setSelectedProvince(e.target.value)} className="form-control w-auto mr-2">
-                              <option value="">Tất cả địa điểm</option>
-                              {provinceList.map(province => (
-                                <option key={province} value={province}>{province}</option>
-                              ))}
-                            </select>
-                            <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} className="form-control w-auto mr-2">
-                              {[...Array(12)].map((_, i) => (
-                                <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>
-                              ))}
-                            </select>
-                            <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="form-control w-auto mr-2">
-                              {[...Array(6)].map((_, i) => {
-                                const year = new Date().getFullYear() - 3 + i;
-                                return <option key={year} value={year}>{year}</option>;
-                              })}
-                            </select>
-                          </div>
                           <table className={`table table-bordered`}>
                             <thead>
                               <tr>

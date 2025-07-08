@@ -198,6 +198,7 @@ export const getAllUsers = async () => {
   }
 };
 
+// API lấy tất cả booking của hệ thống (dùng cho View Profile User, lọc theo user_id)
 export const getAllBookings = async () => {
   try {
     const response = await AxiosInstance.get('/api/bookings/all');
@@ -270,6 +271,17 @@ export const updateBookingStatus = async (bookingId, status) => {
     return response.data;
   } catch (error) {
     console.error('Lỗi khi cập nhật trạng thái booking:', error);
+    throw error;
+  }
+};
+
+// API xóa user theo user_id
+export const deleteUser = async (_id) => {
+  try {
+    const response = await AxiosInstance.delete(`/api/${_id}`);
+    return response.data;
+  } catch (error) {
+    console.error('Lỗi khi xóa user:', error);
     throw error;
   }
 };

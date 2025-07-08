@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import UserProfileModal from '../components/UserProfileModal';
+import { getAllBookings } from '../api/api';
 import { getAllUsers } from '../api/api';
+import { deleteUser } from '../api/api';
 
 const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=dee2e6&color=495057&size=128';
 
@@ -8,6 +11,15 @@ function Users() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 9;
+  // Thêm state cho modal và bookings
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [userBookings, setUserBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [errorBookings, setErrorBookings] = useState(null);
+  // Modal xác nhận xóa user
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
 
   useEffect(() => {
     async function fetchUsers() {
@@ -31,6 +43,21 @@ function Users() {
   const currentUsers = users.filter(u => u.role !== 'admin').slice(indexOfFirstUser, indexOfLastUser);
   const totalPages = Math.ceil(users.length / usersPerPage);
   const isDark = document.body.classList.contains('dark-mode');
+
+  // Hàm xóa user
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    try {
+      await deleteUser(userToDelete._id);
+      setUsers(prev => prev.filter(u => u._id !== userToDelete._id));
+      setShowDeleteModal(false);
+      setUserToDelete(null);
+    } catch (err) {
+      alert('Xóa user thất bại!');
+      setShowDeleteModal(false);
+      setUserToDelete(null);
+    }
+  };
 
   return (
     <div className={`content-wrapper ${isDark ? 'bg-dark text-light' : 'bg-white'}`}>
@@ -88,9 +115,12 @@ function Users() {
                           <a href="#" className="btn btn-sm bg-teal">
                             <i className="fas fa-comments"></i>
                           </a>
-                          <a href="#" className="btn btn-sm btn-primary">
+                          <button className="btn btn-sm btn-primary" onClick={() => { setSelectedUser(user); setShowProfileModal(true); }}>
                             <i className="fas fa-user"></i> View Profile
-                          </a>
+                          </button>
+                          <button className="btn btn-sm btn-danger ml-2" onClick={() => { setUserToDelete(user); setShowDeleteModal(true); }}>
+                            <i className="fas fa-trash"></i> Xóa
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -115,6 +145,29 @@ function Users() {
           )}
         </div>
       </section>
+      <UserProfileModal user={selectedUser} show={showProfileModal} onClose={() => setShowProfileModal(false)} />
+      {/* Modal xác nhận xóa user */}
+      {showDeleteModal && (
+        <div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.3)' }}>
+          <div className="modal-dialog" role="document">
+            <div className="modal-content">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title">Xác nhận xóa User</h5>
+                <button type="button" className="close text-white" onClick={() => setShowDeleteModal(false)}>
+                  <span>&times;</span>
+                </button>
+              </div>
+              <div className="modal-body">
+                <p>Bạn có chắc chắn muốn xóa user <b>{userToDelete?.first_name} {userToDelete?.last_name}</b> không?</p>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>Hủy</button>
+                <button type="button" className="btn btn-danger" onClick={handleDeleteUser}>Xóa</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <footer className={`main-footer ${isDark ? 'bg-dark text-light' : 'bg-white text-dark'}`}>
         <div className="float-right d-none d-sm-block">
           <b>Version</b> 3.2.0
