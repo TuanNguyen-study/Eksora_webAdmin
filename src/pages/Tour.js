@@ -23,7 +23,19 @@ function Tour() {
   const [selectedTour, setSelectedTour] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('view'); // 'view', 'edit', 'add'
-  const [form, setForm] = useState({ name: '', description: '', price: '', image: [''], duration: '', location: '', rating: '', cateID: { name: '', image: '' }, province: '', status: '' });
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+    price_child: '',
+    image: [''],
+    location: '',
+    rating: '',
+    cateID: { _id: '', name: '', image: '' },
+    supplier_id: { _id: '', name: '', email: '', phone: '', address: '', description: '' },
+    opening_time: '',
+    closing_time: ''
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [editingDescription, setEditingDescription] = useState(false);
@@ -135,9 +147,7 @@ function Tour() {
   };
 
   const handleAdd = () => {
-    setForm({ name: '', description: '', price: '', image: [''], duration: '', location: '', rating: '', cateID: { name: '', image: '' }, province: '' });
-    setModalType('add');
-    setShowModal(true);
+    navigate('/add-tour');
   };
 
   const handleFormChange = (e) => {
@@ -282,8 +292,8 @@ function Tour() {
                               <tr>
                                 <th>Tên Tour</th>
                                 <th>Địa điểm</th>
-                                <th>Giá</th>
-                                <th>Thời lượng</th>
+                                <th>Giá (Người lớn / Trẻ em)</th>
+                                <th>Thời gian hoạt động</th>
                                 <th>Danh mục</th>
                                 <th>Hành động</th>
                               </tr>
@@ -298,8 +308,20 @@ function Tour() {
                                   <tr key={tour._id}>
                                     <td>{tour.name}</td>
                                     <td>{tour.location}</td>
-                                    <td>{Number(tour.price).toLocaleString('vi-VN')}VNĐ</td>
-                                    <td>{tour.duration}</td>
+                                    <td>
+                                      {Number(tour.price).toLocaleString('vi-VN')}VNĐ
+                                      {typeof tour.price_child !== 'undefined' &&
+                                        <>
+                                          <br/>
+                                          <span style={{ color: '#888', fontSize: 13 }}>
+                                            {Number(tour.price_child).toLocaleString('vi-VN')}VNĐ (trẻ em)
+                                          </span>
+                                        </>
+                                      }
+                                    </td>
+                                    <td>
+                                      {(tour.open_time || tour.opening_time || 'N/A') + ' - ' + (tour.close_time || tour.closing_time || 'N/A')}
+                                    </td>
                                     <td>{tour.cateID?.name}</td>
                                     <td>
                                       <button className="btn btn-info btn-sm mr-2" onClick={() => handleView(tour)}>
@@ -360,8 +382,18 @@ function Tour() {
       </footer>
       {showModal && (
         <div className="modal show d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.3)' }}>
-          <div className="modal-dialog modal-lg" role="document">
-            <div className="modal-content bg-white text-dark">
+        <div
+          className="modal-dialog modal-lg"
+          role="document"
+          style={{
+            maxWidth: 900,
+            width: '100%',
+            maxHeight: 'calc(100vh - 40px)',
+            margin: '20px auto',
+            boxSizing: 'border-box',
+          }}
+        >
+            <div className="modal-content bg-white text-dark" style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 100px)' }}>
               <div className="modal-header bg-light">
                 <h5 className="modal-title">
                   {modalType === 'view' && 'Chi tiết Tour'}
@@ -433,7 +465,7 @@ function Tour() {
                         </div>
                         <div className="form-row">
                           <div className="form-group col-md-6">
-                            <label><FaTag className="mr-1" />Giá</label>
+                            <label><FaTag className="mr-1" />Giá người lớn</label>
                             <div className="input-group">
                               <input
                                 type="text"
@@ -441,7 +473,6 @@ function Tour() {
                                 name="price"
                                 value={formatNumberVN(form.price)}
                                 onChange={e => {
-                                  // Lưu giá trị số (không dấu chấm) vào state
                                   const raw = e.target.value.replace(/\D/g, '');
                                   setForm({ ...form, price: raw });
                                 }}
@@ -453,14 +484,23 @@ function Tour() {
                             </div>
                           </div>
                           <div className="form-group col-md-6">
-                            <label><FaClock className="mr-1" />Thời lượng</label>
-                            <select className="form-control bg-light" name="duration" value={form.duration} onChange={handleFormChange} required>
-                              <option value="">-- Chọn thời lượng --</option>
-                              <option value="Nửa ngày">Nửa ngày</option>
-                              <option value="1 Ngày">1 Ngày</option>
-                              <option value="2 Ngày 1 Đêm">2 Ngày 1 Đêm</option>
-                              <option value="3 Ngày 2 Đêm">3 Ngày 2 Đêm</option>
-                            </select>
+                            <label><FaTag className="mr-1" />Giá trẻ em</label>
+                            <div className="input-group">
+                              <input
+                                type="text"
+                                className="form-control bg-light"
+                                name="price_child"
+                                value={formatNumberVN(form.price_child)}
+                                onChange={e => {
+                                  const raw = e.target.value.replace(/\D/g, '');
+                                  setForm({ ...form, price_child: raw });
+                                }}
+                                required
+                              />
+                              <div className="input-group-append">
+                                <span className="input-group-text">VNĐ</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                         <div className="form-group">
@@ -484,11 +524,11 @@ function Tour() {
                         <div className="form-row">
                           <div className="form-group col-md-6">
                             <label><i className="fas fa-clock mr-1" />Giờ mở cửa</label>
-                            <input type="time" className="form-control bg-light" name="open_time" value={form.open_time || ''} onChange={handleFormChange} required />
+                            <input type="time" className="form-control bg-light" name="opening_time" value={form.opening_time || ''} onChange={handleFormChange} required />
                           </div>
                           <div className="form-group col-md-6">
                             <label><i className="fas fa-clock mr-1" />Giờ đóng cửa</label>
-                            <input type="time" className="form-control bg-light" name="close_time" value={form.close_time || ''} onChange={handleFormChange} required />
+                            <input type="time" className="form-control bg-light" name="closing_time" value={form.closing_time || ''} onChange={handleFormChange} required />
                           </div>
                         </div>
                         <div className="form-group">

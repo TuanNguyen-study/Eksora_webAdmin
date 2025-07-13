@@ -1,38 +1,51 @@
 import './App.css';
 import Header from './components/Header';
 import Footer from './components/Footer';
-import Home from './components/Home';
+import Home from './pages/Home';
 import SideNav from './components/SideNav';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Tour from './pages/Tour';
 import Vouchers from './pages/Vouchers';
 import Users from './pages/Users';
 import Bookings from './pages/Bookings';
-import Calendar from './pages/Calendar';
+import Calendar from './components/Calendar';
 import Reviews from './components/Reviews';
 import Login from './pages/Login';
+import AddTour from './pages/AddTour';
+import Toast from './components/Toast';
 
 function App() {
-  // State để trigger re-render khi đăng nhập thành công
   const [loginFlag, setLoginFlag] = useState(0);
-  // Kiểm tra trạng thái đăng nhập toàn cục
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true' || sessionStorage.getItem('isLoggedIn') === 'true';
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '' });
+  const headerRef = useRef();
 
-  // Lắng nghe sự kiện storage để cập nhật trạng thái đăng nhập khi tab khác đăng nhập
   useEffect(() => {
     const handleStorage = () => setLoginFlag(f => f + 1);
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('token');
     sessionStorage.removeItem('isLoggedIn');
     sessionStorage.removeItem('token');
     window.location.href = '/login';
+  };
+
+  // Callback khi click notification
+  const handleNotificationClick = (bookingId) => {
+    setToast({ show: true, message: 'Đã mở chi tiết booking!' });
+    if (headerRef.current) headerRef.current.removeNotification(bookingId);
+  };
+
+  // Hàm show toast khi đổi trạng thái booking
+  window.showBookingToast = (msg) => {
+    setToast({ show: true, message: msg });
+    setTimeout(() => setToast({ show: false, message: '' }), 3000);
   };
 
   return (
@@ -45,13 +58,14 @@ function App() {
           </Routes>
         ) : (
           <React.Fragment>
-            <Header />
+            <Header ref={headerRef} onNotificationClick={handleNotificationClick} />
             <div className="d-flex w-100">
               <SideNav onLogoutClick={() => setShowLogoutModal(true)} />
               <div className="flex-grow-1">
                 <Routes>
                   <Route path="/dashboard" element={<Home />} />
                   <Route path="/tour" element={<Tour />} />
+                  <Route path="/add-tour" element={<AddTour />} />
                   <Route path="/vouchers" element={<Vouchers />} />
                   <Route path="/users" element={<Users />} />
                   <Route path="/bookings" element={<Bookings />} />
@@ -63,6 +77,7 @@ function App() {
                 <Footer />
               </div>
             </div>
+            <Toast show={toast.show} message={toast.message} onClose={() => setToast({ show: false, message: '' })} />
             {/* Modal xác nhận đăng xuất */}
             {showLogoutModal && (
               <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.3)' }} tabIndex="-1" role="dialog">

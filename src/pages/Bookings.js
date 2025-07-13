@@ -1,5 +1,31 @@
-import React, { useEffect, useState } from 'react';
+
+import React, { useEffect, useState, useRef } from 'react';
+import JsBarcode from 'jsbarcode';
 import { getAllBookings, updateBookingStatus } from '../api/api';
+import { useLocation } from 'react-router-dom';
+
+// Component hiển thị barcode mã thanh toán
+function BookingBarcode({ orderCode }) {
+  const barcodeRef = useRef(null);
+  useEffect(() => {
+    if (barcodeRef.current && orderCode) {
+      JsBarcode(barcodeRef.current, orderCode, {
+        format: "CODE128",
+        lineColor: "#000",
+        width: 2,
+        height: 40,
+        displayValue: true,
+      });
+    }
+  }, [orderCode]);
+  if (!orderCode) return null;
+  return (
+    <div style={{margin: '12px 0'}}>
+      <label><b>Mã thanh toán:</b> {orderCode}</label>
+      <svg ref={barcodeRef}></svg>
+    </div>
+  );
+}
 
 function Bookings() {
   const [userId, setUserId] = useState('');
@@ -15,6 +41,7 @@ function Bookings() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [productTypeFilter, setProductTypeFilter] = useState('all');
   const bookingsPerPage = 10;
+  const location = useLocation();
 
   useEffect(() => {
     async function fetchData() {
@@ -205,8 +232,12 @@ function Bookings() {
       const data = await getAllBookings();
       setBookings(data);
       setAllBookings(data);
-      if (selectedBooking && selectedBooking._id === booking._id) {
+      const updated = data.find(b => b._id === booking._id);
+      if (updated) {
+        handleViewBooking(updated); // Mở modal chi tiết booking đã xác nhận
+      } else if (selectedBooking && selectedBooking._id === booking._id) {
         setSelectedBooking({ ...selectedBooking, status: 'confirmed' });
+        setShowModal(true);
       }
     } catch (err) {
       alert('Lỗi khi xác nhận booking!');
@@ -249,6 +280,19 @@ function Bookings() {
   const indexOfFirstBooking = indexOfLastBooking - bookingsPerPage;
   const currentBookings = bookings.slice(indexOfFirstBooking, indexOfLastBooking);
   const totalPages = Math.ceil(bookings.length / bookingsPerPage);
+
+  // Mở modal chi tiết booking nếu có bookingId trên URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const bookingId = params.get('bookingId');
+    if (bookingId && allBookings.length > 0) {
+      const found = allBookings.find(b => b._id === bookingId);
+      if (found) {
+        handleViewBooking(found);
+      }
+    }
+    // eslint-disable-next-line
+  }, [location.search, allBookings]);
 
   return (
     <div className="content-wrapper bg-white min-vh-100">
@@ -345,29 +389,43 @@ function Bookings() {
                   <thead>
                     <tr>
                       <th>Tên người đặt</th>
+                      <th>Số điện thoại</th>
                       <th>Tour đặt</th>
-                      <th>Thời gian tour</th>
                       <th>Ngày đặt</th>
+                      <th>Thời gian đi</th>
                       <th>Số lượng người lớn</th>
                       <th>Số lượng trẻ em</th>
                       <th>Dịch vụ đi kèm</th>
                       <th>Thành Tiền</th>
+                      <th>Mã thanh toán</th>
                       <th>Trạng thái</th>
                       <th>Hành động</th>
-                      <th>Xác nhận</th> {/* Thêm cột mới cho Confirm */}
+                      <th>Xác nhận</th>
                     </tr>
                   </thead>
                   <tbody>
                     {currentBookings.map((b) => (
                       <tr key={b._id}>
                         <td>{b.user_id?.first_name} {b.user_id?.last_name}</td>
+                        <td>{b.user_id?.phone || ''}</td>
                         <td>{b.tour_id?.name}</td>
-                        <td>{b.tour_id?.duration}</td>
-                        <td>{b.travel_date ? new Date(b.travel_date).toLocaleDateString('vi-VN') : 'dd/mm/yyyy'}</td>
+                        <td>{b.booking_date ? new Date(b.booking_date).toLocaleDateString('vi-VN') : ''}</td>
+                        <td>{b.travel_date ? new Date(b.travel_date).toLocaleDateString('vi-VN') : ''}</td>
                         <td>{b.quantity_nguoiLon}</td>
                         <td>{b.quantity_treEm}</td>
-                        <td>{b.services ? b.services.join(', ') : 'N/A'}</td>
+                        <td>
+                          {b.selected_options && b.selected_options.length > 0
+                            ? b.selected_options.map((opt, idx) => (
+                                <span key={idx} style={{border: '1px solid #007bff', borderRadius: 6, padding: '2px 8px', marginRight: 4, display: 'inline-block', background: '#f4f8ff', color: '#007bff', fontSize: 13}}>
+                                  {opt.option_service_id?.name}
+                                </span>
+                              ))
+                            : <span style={{color:'#888'}}>Không có</span>}
+                        </td>
                         <td>{b.totalPrice?.toLocaleString('vi-VN')} đ</td>
+                        <td style={{minWidth: 120}}>
+                          {b.order_code ? <BookingBarcode orderCode={b.order_code} /> : <span style={{color:'#888'}}>N/A</span>}
+                        </td>
                         <td>
                           <span className={`badge badge-${b.status === 'pending' ? 'warning' : b.status === 'confirmed' ? 'info' : b.status === 'paid' ? 'primary' : b.status === 'ongoing' ? 'success' : b.status === 'completed' ? 'success' : b.status === 'canceled' || b.status === 'cancelled' ? 'danger' : b.status === 'refund_requested' ? 'warning' : b.status === 'refunded' ? 'info' : b.status === 'expired' ? 'secondary' : 'secondary'}`}>
                             {
@@ -436,7 +494,7 @@ function Bookings() {
                 <table className="table table-sm table-borderless mb-2">
                   <tbody>
                     <tr><td><b>Tên tour:</b></td><td>{selectedBooking.tour_id?.name}</td></tr>
-                    <tr><td><b>Thời lượng:</b></td><td>{selectedBooking.tour_id?.duration}</td></tr>
+                    <tr><td><b>Thời lượng:</b></td><td>{selectedBooking.tour_id?.duration ? selectedBooking.tour_id.duration : ''}</td></tr>
                     <tr><td><b>Địa điểm:</b></td><td>{selectedBooking.tour_id?.location}</td></tr>
                     <tr><td colSpan={2}><hr className="my-2" /></td></tr>
                     <tr><td><b>Khách hàng:</b></td><td>{selectedBooking.user_id?.first_name} {selectedBooking.user_id?.last_name}</td></tr>
@@ -445,9 +503,27 @@ function Bookings() {
                     <tr><td><b>Ngày kết thúc:</b></td><td>{selectedBooking.end_date ? new Date(selectedBooking.end_date).toLocaleDateString('vi-VN') : ''}</td></tr>
                     <tr><td><b>Số lượng người lớn:</b></td><td>{selectedBooking.quantity_nguoiLon}</td></tr>
                     <tr><td><b>Số lượng trẻ em:</b></td><td>{selectedBooking.quantity_treEm}</td></tr>
+                    <tr>
+                      <td><b>Dịch vụ đi kèm:</b></td>
+                      <td>
+                        {selectedBooking.selected_options && selectedBooking.selected_options.length > 0
+                          ? selectedBooking.selected_options.map((opt, idx) => (
+                              <span key={idx} style={{border: '1px solid #007bff', borderRadius: 6, padding: '2px 8px', marginRight: 4, display: 'inline-block', background: '#f4f8ff', color: '#007bff', fontSize: 13}}>
+                                {opt.option_service_id?.name}
+                              </span>
+                            ))
+                          : <span style={{color:'#888'}}>Không có</span>}
+                      </td>
+                    </tr>
                     <tr><td><b>Tổng tiền:</b></td><td>{selectedBooking.totalPrice?.toLocaleString()} VNĐ</td></tr>
                     <tr><td><b>Trạng thái:</b></td><td>{selectedBooking.status === 'pending' ? 'Chưa thanh toán' : selectedBooking.status === 'confirmed' ? 'Đã xác nhận' : selectedBooking.status === 'success' ? 'Đã thanh toán' : selectedBooking.status === 'cancelled' ? 'Đã hủy' : selectedBooking.status}</td></tr>
-                    <tr><td><b>Mã thanh toán:</b></td><td>{selectedBooking.order_code || 'N/A'}</td></tr>
+                    <tr>
+                      <td><b>Mã thanh toán:</b></td>
+                      <td>
+                        {selectedBooking.order_code || 'N/A'}
+                        <BookingBarcode orderCode={selectedBooking.order_code} />
+                      </td>
+                    </tr>
                     <tr><td><b>Lần cập nhật trạng thái gần nhất:</b></td><td>{selectedBooking.last_update ? new Date(selectedBooking.last_update).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}</td></tr>
                   </tbody>
                 </table>

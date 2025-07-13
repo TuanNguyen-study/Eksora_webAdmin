@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { launchErrorToast } from '../components/ErrorToast';
+import { launchSuccessToast } from '../components/SuccessToast';
 
 const AxiosInstance = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL,
@@ -10,6 +11,7 @@ const AxiosInstance = axios.create({
 
 // API tạo booking mới
 export const createBooking = async (bookingData) => {
+
   try {
     const response = await AxiosInstance.post('/api/bookings', bookingData);
     return response.data;
@@ -17,7 +19,8 @@ export const createBooking = async (bookingData) => {
     console.error('Lỗi khi tạo booking:', error);
     throw error;
   }
-};
+}
+// ...existing code...
 
 // API lấy danh sách ưu đãi
 export const getOffers = async () => {
@@ -202,7 +205,22 @@ export const getAllUsers = async () => {
 export const getAllBookings = async () => {
   try {
     const response = await AxiosInstance.get('/api/bookings/all');
-    return response.data;
+    let arr = [];
+    if (Array.isArray(response.data)) {
+      arr = response.data;
+    } else if (response.data && Array.isArray(response.data.bookings)) {
+      arr = response.data.bookings;
+    } else if (response.data && Array.isArray(response.data.data)) {
+      arr = response.data.data;
+    }
+    // Nếu mỗi phần tử là { booking, selected_options }
+    if (arr.length && arr[0].booking) {
+      return arr.map(item => ({
+        ...item.booking,
+        selected_options: item.selected_options || []
+      }));
+    }
+    return arr;
   } catch (error) {
     console.error('Lỗi khi lấy tất cả thông tin booking:', error);
     throw error;
@@ -211,11 +229,52 @@ export const getAllBookings = async () => {
 
 // API tạo tour mới
 export const createTour = async (tourData) => {
+
+  // Kiểm tra dữ liệu đầu vào, cảnh báo rõ trường nào bị rỗng
+  const requiredFields = [
+    { key: 'name', label: 'Tên tour' },
+    { key: 'description', label: 'Mô tả' },
+    { key: 'price', label: 'Giá vé' },
+    { key: 'price_child', label: 'Giá trẻ em' },
+    { key: 'location', label: 'Địa điểm' },
+    { key: 'cateID', label: 'Danh mục' },
+    { key: 'supplier_id', label: 'Nhà cung cấp' },
+    { key: 'image', label: 'Ảnh' },
+    { key: 'open_time', label: 'Giờ mở cửa' },
+    { key: 'close_time', label: 'Giờ đóng cửa' },
+    { key: 'status', label: 'Trạng thái' },
+  ];
+  for (const field of requiredFields) {
+    if (
+      tourData[field.key] === undefined ||
+      tourData[field.key] === null ||
+      (typeof tourData[field.key] === 'string' && !tourData[field.key].trim()) ||
+      (Array.isArray(tourData[field.key]) && (!tourData[field.key].length || !tourData[field.key][0] || tourData[field.key][0] === ''))
+    ) {
+      launchErrorToast(`Trường bắt buộc bị thiếu hoặc rỗng: ${field.label}`);
+      throw new Error(`Trường bắt buộc bị thiếu hoặc rỗng: ${field.label}`);
+    }
+  }
   try {
-    const response = await AxiosInstance.post('/api/tours', tourData);
+    // Đảm bảo cateID và supplier_id là ID (string), không phải object
+    const dataToSend = {
+      ...tourData,
+      cateID: typeof tourData.cateID === 'object' && tourData.cateID?._id ? tourData.cateID._id : tourData.cateID,
+      supplier_id: typeof tourData.supplier_id === 'object' && tourData.supplier_id?._id ? tourData.supplier_id._id : tourData.supplier_id,
+    };
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.log('Dữ liệu gửi lên API tạo tour:', dataToSend);
+    }
+    const response = await AxiosInstance.post('/api/tours', dataToSend);
+    launchSuccessToast('Tạo tour thành công!');
     return response.data;
   } catch (error) {
-    launchErrorToast('Lỗi khi tạo tour!');
+    if (error.response && error.response.data) {
+      launchErrorToast('Lỗi khi tạo tour: ' + (error.response.data.message || 'Unknown error'));
+    } else {
+      launchErrorToast('Lỗi khi tạo tour!');
+    }
     throw error;
   }
 };

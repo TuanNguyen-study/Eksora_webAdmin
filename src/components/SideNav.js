@@ -26,6 +26,14 @@ function SideNav({ onLogoutClick }) {
     };
   }, []);
 
+  // Xác định active cho từng nhóm rõ ràng
+  const isToursGroupActive = location.pathname === '/tour' || location.pathname === '/tour/' || location.pathname === '/add-tour';
+  const isTourListActive = location.pathname === '/tour' || location.pathname === '/tour/';
+  const isAddTourActive = location.pathname === '/add-tour';
+  const isCategoryGroupActive = location.pathname.startsWith('/vouchers') || location.pathname.startsWith('/users');
+  const isVouchersActive = location.pathname.startsWith('/vouchers');
+  const isUsersActive = location.pathname.startsWith('/users');
+
   return (
     <div>
       <aside className="main-sidebar sidebar-light elevation-4" style={{ minHeight: '100vh', position: 'fixed', left: 0, top: 0, bottom: 0, zIndex: 1040 }}>
@@ -84,32 +92,44 @@ function SideNav({ onLogoutClick }) {
                 </ul>
               </li>
 
-              {/* Danh mục */}
-              <li className={`nav-item menu-open${isCategoryActive ? ' active' : ''}`}>
-                <a href="#" className="nav-link" style={isCategoryActive ? { background: '#3f6791', color: '#fff' } : {}}>
-                  <i className="fa-solid fa fa-folder"></i>
+              {/* Danh mục Tours */}
+              <li className={`nav-item menu-open${isToursGroupActive ? ' active' : ''}`}>
+                <button type="button" className="nav-link w-100 text-left" style={isToursGroupActive ? { background: '#3f6791', color: '#fff' } : {}}>
+                  <i className="fa-solid fa fa-map"></i>
                   <i className="right fas fa-angle-left" />
-                   <p> Categories </p>
-                </a>
+                  <p> Tours </p>
+                </button>
                 <ul className="nav nav-treeview">
                   <li className="nav-item">
-                    <Link to="/tour" className="nav-link text-dark" style={location.pathname.startsWith('/tour') ? { background: '#ebecec' } : {}}>
-                       <i className="far fa-circle nav-icon" />
-                      <p>Tours</p>
+                    <Link to="/tour" className="nav-link text-dark" style={isTourListActive ? { background: '#ebecec' } : {}}>
+                      <i className="far fa-circle nav-icon" />
+                      <p>Quản lý Tours</p>
+                    </Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link to="/add-tour" className="nav-link text-dark" style={isAddTourActive ? { background: '#ebecec' } : {}}>
+                      <i className="far fa-circle nav-icon" />
+                      <p>Thêm Tour</p>
                     </Link>
                   </li>
                 </ul>
+              </li>
+              {/* Danh mục khác */}
+              <li className={`nav-item menu-open${isCategoryGroupActive ? ' active' : ''}`}>
+                <button type="button" className="nav-link w-100 text-left" style={isCategoryGroupActive ? { background: '#3f6791', color: '#fff' } : {}}>
+                  <i className="fa-solid fa fa-folder"></i>
+                  <i className="right fas fa-angle-left" />
+                  <p> Danh mục </p>
+                </button>
                 <ul className="nav nav-treeview">
                   <li className="nav-item">
-                    <Link to="/vouchers" className="nav-link text-dark" style={location.pathname.startsWith('/vouchers') ? { background: '#ebecec' } : {}}>
+                    <Link to="/vouchers" className="nav-link text-dark" style={isVouchersActive ? { background: '#ebecec' } : {}}>
                       <i className="far fa-circle nav-icon" />
                       <p>Vouchers</p>
                     </Link>
                   </li>
-                </ul>
-                <ul className="nav nav-treeview">
                   <li className="nav-item">
-                    <Link to="/users" className="nav-link text-dark" style={location.pathname.startsWith('/users') ? { background: '#ebecec' } : {}}>
+                    <Link to="/users" className="nav-link text-dark" style={isUsersActive ? { background: '#ebecec' } : {}}>
                       <i className="far fa-circle nav-icon" />
                       <p>Users</p>
                     </Link>
