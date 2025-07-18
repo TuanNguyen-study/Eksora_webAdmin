@@ -282,10 +282,82 @@ export const createTour = async (tourData) => {
 // API cập nhật tour theo id
 export const updateTour = async (_id, tourData) => {
   try {
-    const response = await AxiosInstance.put(`/api/tours/${_id}`, tourData);
-    return response.data;
+    console.log('=== API UPDATE TOUR ===');
+    console.log('ID received:', _id);
+    console.log('ID type:', typeof _id);
+    console.log('ID length:', _id?.length);
+    console.log('Tour data:', tourData);
+    console.log('======================');
+    
+    if (!_id) {
+      throw new Error('Tour ID is required');
+    }
+    
+    // Thử nhiều endpoint khác nhau
+    let response;
+    let lastError;
+    const endpointsToTry = [
+      { method: 'PUT', url: `/api/tours/${_id}`, name: 'PUT /api/tours/{id}' },
+      { method: 'PATCH', url: `/api/tours/${_id}`, name: 'PATCH /api/tours/{id}' },
+      { method: 'PUT', url: `/api/tours/update/${_id}`, name: 'PUT /api/tours/update/{id}' },
+      { method: 'POST', url: `/api/tours/${_id}`, name: 'POST /api/tours/{id}' },
+      { method: 'PUT', url: `/api/tours/edit/${_id}`, name: 'PUT /api/tours/edit/{id}' },
+      { method: 'POST', url: `/api/tours/update/${_id}`, name: 'POST /api/tours/update/{id}' },
+      { method: 'POST', url: `/api/tours/edit/${_id}`, name: 'POST /api/tours/edit/{id}' },
+      { method: 'PUT', url: `/tours/${_id}`, name: 'PUT /tours/{id}' },
+      { method: 'PATCH', url: `/tours/${_id}`, name: 'PATCH /tours/{id}' },
+      { method: 'POST', url: `/tours/${_id}`, name: 'POST /tours/{id}' }
+    ];
+    
+    for (const endpoint of endpointsToTry) {
+      try {
+        console.log(`Trying ${endpoint.name}: ${endpoint.method} ${endpoint.url}`);
+        
+        switch (endpoint.method) {
+          case 'PUT':
+            response = await AxiosInstance.put(endpoint.url, tourData);
+            break;
+          case 'PATCH':
+            response = await AxiosInstance.patch(endpoint.url, tourData);
+            break;
+          case 'POST':
+            response = await AxiosInstance.post(endpoint.url, tourData);
+            break;
+        }
+        
+        console.log(`${endpoint.name} success:`, response.data);
+        break; // Thành công, thoát khỏi vòng lặp
+      } catch (error) {
+        console.log(`${endpoint.name} failed:`, error.response?.status || 'Network error');
+        lastError = error;
+        continue; // Thử endpoint tiếp theo
+      }
+    }
+    
+    if (response) {
+      console.log('Update response:', response.data);
+      launchSuccessToast('Cập nhật tour thành công!');
+      return response.data;
+    } else {
+      throw lastError;
+    }
   } catch (error) {
-    launchErrorToast('Lỗi khi cập nhật tour!');
+    console.error('=== API ERROR ===');
+    console.error('Error updating tour:', error);
+    console.error('Error response:', error.response);
+    console.error('Error status:', error.response?.status);
+    console.error('Error data:', error.response?.data);
+    console.error('Request URL:', error.config?.url);
+    console.error('All endpoints tried and failed. Backend may not have update functionality implemented.');
+    console.error('================');
+    
+    if (error.response?.status === 404) {
+      launchErrorToast('Không tìm thấy endpoint API để cập nhật tour. Backend chưa triển khai chức năng cập nhật!');
+    } else if (error.response && error.response.data) {
+      launchErrorToast('Lỗi khi cập nhật tour: ' + (error.response.data.message || 'Unknown error'));
+    } else {
+      launchErrorToast('Lỗi khi cập nhật tour!');
+    }
     throw error;
   }
 };

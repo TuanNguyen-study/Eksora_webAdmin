@@ -34,7 +34,8 @@ function Tour() {
     cateID: { _id: '', name: '', image: '' },
     supplier_id: { _id: '', name: '', email: '', phone: '', address: '', description: '' },
     opening_time: '',
-    closing_time: ''
+    closing_time: '',
+    services: []
   });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -58,6 +59,15 @@ function Tour() {
       setError(null);
       try {
         let data = await getTours();
+        
+        console.log('=== TOURS FROM API ===');
+        console.log('Total tours:', data.length);
+        console.log('Sample tour IDs:');
+        data.slice(0, 5).forEach((tour, index) => {
+          console.log(`Tour ${index + 1}: ID=${tour._id}, Name=${tour.name}`);
+        });
+        console.log('=====================');
+        
         // Lọc theo danh mục nếu có chọn
         if (selectedCategory) {
           data = data.filter(t => t.cateID && (t.cateID._id === selectedCategory || t.cateID.name === selectedCategory));
@@ -124,7 +134,35 @@ function Tour() {
     // Lấy danh mục
     getCategories().then(setCategories).catch(() => setCategories([]));
     // Lấy nhà cung cấp
-    getSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
+    getSuppliers().then(data => {
+      console.log('Suppliers data:', data);
+      console.log('Suppliers count:', data?.length);
+      
+      // Kiểm tra và loại bỏ duplicate IDs
+      const supplierArray = Array.isArray(data) ? data : [];
+      const ids = supplierArray.map(s => s._id);
+      const uniqueIds = [...new Set(ids)];
+      
+      if (ids.length !== uniqueIds.length) {
+        console.warn('FOUND DUPLICATE SUPPLIER IDs:', ids.filter((id, index) => ids.indexOf(id) !== index));
+        console.warn('Filtering out duplicates...');
+        
+        // Lọc suppliers unique theo _id, giữ supplier đầu tiên cho mỗi ID
+        const uniqueSuppliers = supplierArray.filter((supplier, index, self) => 
+          index === self.findIndex(s => s._id === supplier._id)
+        );
+        
+        console.log('Original suppliers count:', supplierArray.length);
+        console.log('Unique suppliers count:', uniqueSuppliers.length);
+        setSuppliers(uniqueSuppliers);
+      } else {
+        console.log('No duplicate supplier IDs found');
+        setSuppliers(supplierArray);
+      }
+    }).catch(error => {
+      console.error('Error loading suppliers:', error);
+      setSuppliers([]);
+    });
   }, [selectedCategory, selectedMonth, selectedYear, priceRange, tourFilter, selectedProvince, selectedCategoryForProvince]);
 
   const handleView = (tour) => {
@@ -134,8 +172,19 @@ function Tour() {
   };
 
   const handleEdit = (tour) => {
+    console.log('=== EDIT TOUR DEBUG ===');
+    console.log('Selected tour object:', tour);
+    console.log('Tour ID:', tour._id);
+    console.log('Tour ID type:', typeof tour._id);
+    console.log('=======================');
+    
     setSelectedTour(tour);
-    setForm({ ...tour, cateID: { ...tour.cateID } });
+    setForm({ 
+      ...tour, 
+      cateID: tour.cateID || { _id: '', name: '', image: '' },
+      supplier_id: tour.supplier_id || { _id: '', name: '', email: '', phone: '', address: '', description: '' },
+      services: tour.services || []
+    });
     setModalType('edit');
     setShowModal(true);
   };
@@ -155,7 +204,18 @@ function Tour() {
     if (e && e.target) {
       const { name, value } = e.target;
       if (name.startsWith('cateID.')) {
-        setForm({ ...form, cateID: { ...form.cateID, [name.split('.')[1]]: value } });
+        // Handle category selection by name, find the actual category object
+        const selectedCategory = categories.find(cat => cat.name === value);
+        setForm({ ...form, cateID: selectedCategory || { _id: '', name: value } });
+      } else if (name === 'supplier_id') {
+        // Tìm supplier object từ danh sách
+        const selectedSupplier = suppliers.find(sup => sup._id === value);
+        setForm({ ...form, supplier_id: selectedSupplier || { _id: value } });
+      } else if (name === 'price' || name === 'price_child') {
+        // Handle price formatting
+        const raw = value.replace(/\D/g, '');
+        const formatted = formatNumberVN(raw);
+        setForm({ ...form, [name]: formatted });
       } else if (name === 'image') {
         setForm({ ...form, image: value.split(',') });
       } else {
@@ -180,12 +240,61 @@ function Tour() {
       }
     } else if (modalType === 'edit') {
       try {
-        const updated = await updateTour(selectedTour._id, form);
+        console.log('=== FORM SUBMIT DEBUG ===');
+        console.log('Selected tour:', selectedTour);
+        console.log('Form data:', form);
+        console.log('Selected tour ID:', selectedTour?._id);
+        console.log('ID exists:', !!selectedTour?._id);
+        
+        if (!selectedTour || !selectedTour._id) {
+          alert('Lỗi: Không tìm thấy ID tour để cập nhật');
+          return;
+        }
+        
+        // Check if tour still exists in current tours list
+        const tourExists = tours.find(t => t._id === selectedTour._id);
+        if (!tourExists) {
+          alert('Lỗi: Tour không còn tồn tại trong danh sách. Vui lòng refresh trang.');
+          setShowModal(false);
+          return;
+        }
+        
+        console.log('Tour exists in current list:', !!tourExists);
+        
+        // Prepare data for update - match exact API format
+        const updateData = {
+          name: form.name,
+          description: form.description,
+          price: typeof form.price === 'string' ? Number(form.price.replace(/\./g, '')) : Number(form.price),
+          price_child: typeof form.price_child === 'string' ? Number(form.price_child.replace(/\./g, '')) : Number(form.price_child),
+          image: Array.isArray(form.image) ? form.image : [form.image || ''],
+          cateID: form.cateID?._id || null,
+          supplier_id: form.supplier_id?._id || null,
+          location: form.location,
+          opening_time: form.opening_time,
+          closing_time: form.closing_time,
+          services: (form.services || []).map(service => ({
+            name: service.name,
+            type: service.type,
+            options: (service.options || []).map(option => ({
+              title: option.title,
+              price_extra: Number(option.price_extra) || 0
+            }))
+          }))
+        };
+        
+        console.log('Data being sent to API:', updateData);
+        console.log('Tour ID being sent:', selectedTour._id);
+        console.log('API call: updateTour(' + selectedTour._id + ', updateData)');
+        console.log('========================');
+        
+        const updated = await updateTour(selectedTour._id, updateData);
         setTours(tours.map(t => t._id === selectedTour._id ? updated : t));
         alert('Cập nhật tour thành công!');
         setShowModal(false);
       } catch (err) {
-        alert('Lỗi khi cập nhật tour!');
+        console.error('Error updating tour:', err);
+        alert('Lỗi khi cập nhật tour: ' + (err.message || 'Unknown error'));
       }
     }
   };
@@ -409,7 +518,7 @@ function Tour() {
                   <div>
                     <div className="mb-3 d-flex flex-wrap justify-content-center">
                       {selectedTour.image?.map((img, idx) => (
-                        <img key={idx} src={img} alt="tour" style={{ width: 180, height: 120, objectFit: 'cover', marginRight: 8, marginBottom: 8, borderRadius: 8, boxShadow: '0 2px 8px #ccc' }} />
+                        <img key={`view-img-${idx}-${img.substring(img.lastIndexOf('/') + 1, img.lastIndexOf('.'))}`} src={img} alt="tour" style={{ width: 180, height: 120, objectFit: 'cover', marginRight: 8, marginBottom: 8, borderRadius: 8, boxShadow: '0 2px 8px #ccc' }} />
                       ))}
                     </div>
                     <div className="row">
@@ -472,10 +581,7 @@ function Tour() {
                                 className="form-control bg-light"
                                 name="price"
                                 value={formatNumberVN(form.price)}
-                                onChange={e => {
-                                  const raw = e.target.value.replace(/\D/g, '');
-                                  setForm({ ...form, price: raw });
-                                }}
+                                onChange={handleFormChange}
                                 required
                               />
                               <div className="input-group-append">
@@ -491,10 +597,7 @@ function Tour() {
                                 className="form-control bg-light"
                                 name="price_child"
                                 value={formatNumberVN(form.price_child)}
-                                onChange={e => {
-                                  const raw = e.target.value.replace(/\D/g, '');
-                                  setForm({ ...form, price_child: raw });
-                                }}
+                                onChange={handleFormChange}
                                 required
                               />
                               <div className="input-group-append">
@@ -514,10 +617,10 @@ function Tour() {
                         </div>
                         <div className="form-group">
                           <label><FaList className="mr-1" />Nhà cung cấp</label>
-                          <select className="form-control bg-light" name="supplier_id" value={form.supplier_id || ''} onChange={handleFormChange} required>
+                          <select className="form-control bg-light" name="supplier_id" value={form.supplier_id?._id || ''} onChange={handleFormChange} required>
                             <option value="">-- Chọn nhà cung cấp --</option>
-                            {suppliers.map(sup => (
-                              <option key={sup._id} value={sup._id}>{sup.name}</option>
+                            {suppliers.map((sup, idx) => (
+                              <option key={`supplier-${sup._id || 'unknown'}-${idx}`} value={sup._id}>{sup.name}</option>
                             ))}
                           </select>
                         </div>
@@ -536,8 +639,138 @@ function Tour() {
                           <input type="file" className="form-control-file" accept="image/*" multiple onChange={handleImageUpload} />
                           <div className="d-flex flex-wrap mt-2">
                             {form.image && form.image.map((img, idx) => (
-                              <img key={idx} src={img} alt="tour" style={{ width: 60, height: 40, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
+                              <img key={`form-img-${idx}-${Date.now()}`} src={img} alt="tour" style={{ width: 60, height: 40, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
                             ))}
+                          </div>
+                        </div>
+                        {/* Services Section */}
+                        <div className="form-group">
+                          <label><i className="fas fa-concierge-bell mr-1" />Dịch vụ</label>
+                          <div className="border rounded p-3" style={{ backgroundColor: '#f8f9fa' }}>
+                            {form.services && form.services.map((service, serviceIndex) => (
+                              <div key={serviceIndex} className="mb-3 p-3 border rounded bg-white">
+                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                  <h6 className="mb-0">Dịch vụ {serviceIndex + 1}</h6>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-danger"
+                                    onClick={() => {
+                                      const newServices = form.services.filter((_, idx) => idx !== serviceIndex);
+                                      setForm({ ...form, services: newServices });
+                                    }}
+                                  >
+                                    <i className="fas fa-trash"></i>
+                                  </button>
+                                </div>
+                                
+                                <div className="form-row mb-2">
+                                  <div className="col-md-8">
+                                    <label>Tên dịch vụ</label>
+                                    <input
+                                      type="text"
+                                      className="form-control"
+                                      value={service.name || ''}
+                                      onChange={(e) => {
+                                        const newServices = [...form.services];
+                                        newServices[serviceIndex].name = e.target.value;
+                                        setForm({ ...form, services: newServices });
+                                      }}
+                                      placeholder="Ví dụ: Loại hướng dẫn viên"
+                                    />
+                                  </div>
+                                  <div className="col-md-4">
+                                    <label>Loại</label>
+                                    <select
+                                      className="form-control"
+                                      value={service.type || 'single'}
+                                      onChange={(e) => {
+                                        const newServices = [...form.services];
+                                        newServices[serviceIndex].type = e.target.value;
+                                        setForm({ ...form, services: newServices });
+                                      }}
+                                    >
+                                      <option value="single">Chọn một</option>
+                                      <option value="multiple">Chọn nhiều</option>
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <label>Tùy chọn</label>
+                                {service.options && service.options.map((option, optionIndex) => (
+                                  <div key={optionIndex} className="form-row mb-2 align-items-end">
+                                    <div className="col-md-6">
+                                      <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="Tên tùy chọn"
+                                        value={option.title || ''}
+                                        onChange={(e) => {
+                                          const newServices = [...form.services];
+                                          newServices[serviceIndex].options[optionIndex].title = e.target.value;
+                                          setForm({ ...form, services: newServices });
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="col-md-4">
+                                      <input
+                                        type="number"
+                                        className="form-control"
+                                        placeholder="Giá thêm"
+                                        value={option.price_extra || 0}
+                                        onChange={(e) => {
+                                          const newServices = [...form.services];
+                                          newServices[serviceIndex].options[optionIndex].price_extra = parseInt(e.target.value) || 0;
+                                          setForm({ ...form, services: newServices });
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="col-md-2">
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-danger"
+                                        onClick={() => {
+                                          const newServices = [...form.services];
+                                          newServices[serviceIndex].options = newServices[serviceIndex].options.filter((_, idx) => idx !== optionIndex);
+                                          setForm({ ...form, services: newServices });
+                                        }}
+                                      >
+                                        <i className="fas fa-times"></i>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                                
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-primary"
+                                  onClick={() => {
+                                    const newServices = [...form.services];
+                                    if (!newServices[serviceIndex].options) {
+                                      newServices[serviceIndex].options = [];
+                                    }
+                                    newServices[serviceIndex].options.push({ title: '', price_extra: 0 });
+                                    setForm({ ...form, services: newServices });
+                                  }}
+                                >
+                                  <i className="fas fa-plus mr-1"></i>Thêm tùy chọn
+                                </button>
+                              </div>
+                            ))}
+                            
+                            <button
+                              type="button"
+                              className="btn btn-outline-success btn-sm"
+                              onClick={() => {
+                                const newService = {
+                                  name: '',
+                                  type: 'single',
+                                  options: [{ title: '', price_extra: 0 }]
+                                };
+                                setForm({ ...form, services: [...(form.services || []), newService] });
+                              }}
+                            >
+                              <i className="fas fa-plus mr-1"></i>Thêm dịch vụ
+                            </button>
                           </div>
                         </div>
                       </>
