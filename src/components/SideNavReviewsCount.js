@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getReviews } from '../api/api';
+import { getReviews, getCurrentUserRole, getUser } from '../api/api';
 import { Link, useLocation } from 'react-router-dom';
 
 function SideNavReviewsCount() {
@@ -7,7 +7,34 @@ function SideNavReviewsCount() {
   const location = useLocation();
 
   useEffect(() => {
-    getReviews().then(data => setCount(data.length)).catch(() => setCount(0));
+    async function fetchReviewCount() {
+      try {
+        // Lấy thông tin user và role
+        const [role, userProfile, reviewsData] = await Promise.all([
+          getCurrentUserRole(),
+          getUser(),
+          getReviews()
+        ]);
+        
+        // Nếu là supplier, chỉ đếm reviews của tours mà supplier đó cung cấp
+        if (role === 'supplier') {
+          const supplierReviews = reviewsData.filter(review => {
+            // Kiểm tra nếu tour của review có supplier_id trùng với current user
+            return review.tour?.supplier_id === userProfile._id || 
+                   review.tour?.supplier_id?._id === userProfile._id;
+          });
+          setCount(supplierReviews.length);
+        } else {
+          // Admin thì đếm tất cả reviews
+          setCount(reviewsData.length);
+        }
+      } catch (error) {
+        console.error('Error fetching review count:', error);
+        setCount(0);
+      }
+    }
+    
+    fetchReviewCount();
   }, []);
 
   return (

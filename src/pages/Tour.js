@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTours, getCategories, getSuppliers, updateTour } from '../api/api';
+import { getTours, getCategories, getSuppliers, updateTour, getToursByRole, approveTour, toggleTourStatus, getCurrentUserRole, getUser, testEndpoints } from '../api/api';
 import { FaTag, FaClock, FaList, FaMapMarkerAlt, FaImage, FaAlignLeft, FaCheckCircle } from 'react-icons/fa';
 import { uploadImageToCloudinary } from '../api/cloudinary';
 import CkeditorField from '../components/CkeditorField';
@@ -52,21 +52,36 @@ function Tour() {
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedCategoryForProvince, setSelectedCategoryForProvince] = useState('');
   const [provinceList, setProvinceList] = useState([]);
+  const [userRole, setUserRole] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Helper function để kiểm tra quyền admin
+  const isAdmin = () => userRole === 'admin';
 
   useEffect(() => {
     async function fetchTours() {
       setLoading(true);
       setError(null);
       try {
-        let data = await getTours();
+        // Lấy thông tin user và role trước
+        const [role, userProfile] = await Promise.all([
+          getCurrentUserRole(),
+          getUser()
+        ]);
+        setUserRole(role);
+        setCurrentUser(userProfile);
         
-        console.log('=== TOURS FROM API ===');
+        // Lấy tours theo role
+        let data = await getToursByRole();
+        
+        console.log('=== TOURS FROM API (BY ROLE) ===');
+        console.log('User role:', role);
         console.log('Total tours:', data.length);
         console.log('Sample tour IDs:');
         data.slice(0, 5).forEach((tour, index) => {
-          console.log(`Tour ${index + 1}: ID=${tour._id}, Name=${tour.name}`);
+          console.log(`Tour ${index + 1}: ID=${tour._id}, Name=${tour.name}, Status=${tour.status}`);
         });
-        console.log('=====================');
+        console.log('====================================');
         
         // Lọc theo danh mục nếu có chọn
         if (selectedCategory) {
@@ -197,6 +212,80 @@ function Tour() {
 
   const handleAdd = () => {
     navigate('/add-tour');
+  };
+
+  // Hàm xử lý approve tour (chỉ dành cho admin)
+  const handleApproveTour = async (tourId, approved = true) => {
+    // Kiểm tra quyền admin trước khi thực hiện
+    if (userRole !== 'admin') {
+      alert('Bạn không có quyền thực hiện hành động này!');
+      return;
+    }
+
+    try {
+      await approveTour(tourId, approved);
+      
+      // Reload tours sau khi approve/reject
+      console.log('Reloading tours after approval...');
+      const data = await getToursByRole();
+      setTours(data);
+      
+      // Toast message đã được hiển thị trong API, không cần alert thêm
+      console.log('Tour approval completed successfully');
+    } catch (error) {
+      console.error('Error approving tour:', error);
+      
+      // Toast error message đã được hiển thị trong API, không cần alert thêm
+      console.log('Error toast should be displayed by API layer');
+    }
+  };
+
+  // Hàm xử lý thay đổi trạng thái tour (chỉ dành cho admin)
+  const handleToggleStatus = async (tourId, currentStatus) => {
+    // Kiểm tra quyền admin trước khi thực hiện
+    if (userRole !== 'admin') {
+      alert('Bạn không có quyền thực hiện hành động này!');
+      return;
+    }
+
+    console.log('=== HANDLE TOGGLE STATUS DEBUG ===');
+    console.log('Tour ID:', tourId);
+    console.log('Current Status:', currentStatus);
+    console.log('User Role:', userRole);
+    console.log('===================================');
+
+    // Test endpoints trước khi toggle
+    console.log('Testing available endpoints...');
+    await testEndpoints(tourId);
+
+    try {
+      const isCurrentlyActive = currentStatus === 'active';
+      const newStatus = !isCurrentlyActive;
+      
+      console.log('Is Currently Active:', isCurrentlyActive);
+      console.log('New Status (boolean):', newStatus);
+      
+      await toggleTourStatus(tourId, newStatus);
+      
+      // Reload tours sau khi thay đổi trạng thái
+      console.log('Reloading tours after status change...');
+      const data = await getToursByRole();
+      setTours(data);
+      
+      // Toast message đã được hiển thị trong API, không cần alert thêm
+      console.log('Status toggle completed successfully');
+    } catch (error) {
+      console.error('=== FRONTEND ERROR DETAILS ===');
+      console.error('Error toggling tour status:', error);
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Error response status:', error.response?.status);
+      console.error('Error response data:', error.response?.data);
+      console.error('==============================');
+      
+      // Toast error message đã được hiển thị trong API, không cần alert thêm
+      console.log('Error toast should be displayed by API layer');
+    }
   };
 
   const handleFormChange = (e) => {
@@ -352,7 +441,21 @@ function Tour() {
         <div className="container-fluid">
           <div className="row mb-2">
             <div className="col-sm-6">
-              <h1 className={isDark ? 'text-light' : 'text-dark'}>Quản lý Tour</h1>
+              <div className="d-flex align-items-center">
+                <h1 className={isDark ? 'text-light' : 'text-dark'}>Quản lý Tour</h1>
+                {isAdmin() && (
+                  <small className="text-muted ml-3">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Hiển thị tất cả tours (đã duyệt và chờ duyệt)
+                  </small>
+                )}
+                {userRole === 'supplier' && (
+                  <small className="text-muted ml-3">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Hiển thị tours của bạn
+                  </small>
+                )}
+              </div>
             </div>
             <div className="col-sm-6 d-flex justify-content-end align-items-center">
               <ol className="breadcrumb float-sm-right mb-0 mr-3">
@@ -389,7 +492,9 @@ function Tour() {
                 </div>
                 {/* Bảng tour */}
                 <div className="col-md-12">
-                  <button className="btn btn-primary mb-3" onClick={handleAdd}>Thêm Tour mới</button>
+                  {userRole === 'supplier' && (
+                    <button className="btn btn-primary mb-3" onClick={handleAdd}>Thêm Tour mới</button>
+                  )}
                   {loading && <div>Đang tải dữ liệu...</div>}
                   {error && <div className="alert alert-danger">{error}</div>}
                   {!loading && !error && (
@@ -404,6 +509,8 @@ function Tour() {
                                 <th>Giá (Người lớn / Trẻ em)</th>
                                 <th>Thời gian hoạt động</th>
                                 <th>Danh mục</th>
+                                {isAdmin() && <th>Trạng thái</th>}
+                                {isAdmin() && <th>Nhà cung cấp</th>}
                                 <th>Hành động</th>
                               </tr>
                             </thead>
@@ -413,8 +520,8 @@ function Tour() {
                                   (!selectedProvince || tour.province === selectedProvince) &&
                                   (!selectedCategory || (tour.cateID && (tour.cateID._id === selectedCategory || tour.cateID.name === categories.find(c => c._id === selectedCategory)?.name)))
                                 )
-                                .map(tour => (
-                                  <tr key={tour._id}>
+                                .map((tour, index) => (
+                                  <tr key={`tour-${tour._id}-${index}`}>
                                     <td>{tour.name}</td>
                                     <td>{tour.location}</td>
                                     <td>
@@ -432,16 +539,65 @@ function Tour() {
                                       {(tour.open_time || tour.opening_time || 'N/A') + ' - ' + (tour.close_time || tour.closing_time || 'N/A')}
                                     </td>
                                     <td>{tour.cateID?.name}</td>
+                                    {isAdmin() && (
+                                      <td>
+                                        <span className={`badge badge-${
+                                          tour.status === 'requested' ? 'warning' : 
+                                          tour.status === 'active' ? 'success' : 
+                                          tour.status === 'deactive' ? 'danger' : 
+                                          'secondary'
+                                        }`}>
+                                          {tour.status === 'requested' ? 'Chờ duyệt' : 
+                                           tour.status === 'active' ? 'Active' :
+                                           tour.status === 'deactive' ? 'Deactive' : tour.status}
+                                        </span>
+                                      </td>
+                                    )}
+                                    {isAdmin() && (
+                                      <td>{tour.supplier_id?.name || 'N/A'}</td>
+                                    )}
                                     <td>
                                       <button className="btn btn-info btn-sm mr-2" onClick={() => handleView(tour)}>
                                         <i className="fas fa-eye mr-1"></i> Xem
                                       </button>
-                                      <button className="btn btn-warning btn-sm mr-2" onClick={() => handleEdit(tour)}>
-                                        <i className="fas fa-edit mr-1"></i> Sửa
-                                      </button>
-                                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(tour._id)}>
-                                        <i className="fas fa-trash mr-1"></i> Xóa
-                                      </button>
+                                      {userRole === 'supplier' && (
+                                        <button className="btn btn-warning btn-sm mr-2" onClick={() => handleEdit(tour)}>
+                                          <i className="fas fa-edit mr-1"></i> Sửa
+                                        </button>
+                                      )}
+                                      {isAdmin() && tour.status === 'requested' && (
+                                        <>
+                                          <button 
+                                            className="btn btn-success btn-sm mr-2" 
+                                            onClick={() => handleApproveTour(tour._id, true)}
+                                            title="Duyệt tour"
+                                          >
+                                            <i className="fas fa-check mr-1"></i> Duyệt
+                                          </button>
+                                          <button 
+                                            className="btn btn-danger btn-sm mr-2" 
+                                            onClick={() => handleApproveTour(tour._id, false)}
+                                            title="Từ chối tour"
+                                          >
+                                            <i className="fas fa-times mr-1"></i> Từ chối
+                                          </button>
+                                        </>
+                                      )}
+                                      {isAdmin() && (tour.status === 'active' || tour.status === 'deactive') && (
+                                        <button 
+                                          className={`btn btn-sm mr-2 ${tour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
+                                          onClick={() => handleToggleStatus(tour._id, tour.status)}
+                                          title={tour.status === 'active' ? 'Hủy kích hoạt tour' : 'Kích hoạt tour'}
+                                        >
+                                          <i className={`fas ${tour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
+                                          {tour.status === 'active' ? 'Deactive' : 'Active'}
+                                        </button>
+                                      )}
+                                      {userRole === 'supplier' && (
+                                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(tour._id)}>
+                                          <i className="fas fa-trash mr-1"></i> Xóa
+                                        </button>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
@@ -518,7 +674,7 @@ function Tour() {
                   <div>
                     <div className="mb-3 d-flex flex-wrap justify-content-center">
                       {selectedTour.image?.map((img, idx) => (
-                        <img key={`view-img-${idx}-${img.substring(img.lastIndexOf('/') + 1, img.lastIndexOf('.'))}`} src={img} alt="tour" style={{ width: 180, height: 120, objectFit: 'cover', marginRight: 8, marginBottom: 8, borderRadius: 8, boxShadow: '0 2px 8px #ccc' }} />
+                        <img key={`view-img-${selectedTour._id}-${idx}`} src={img} alt="tour" style={{ width: 180, height: 120, objectFit: 'cover', marginRight: 8, marginBottom: 8, borderRadius: 8, boxShadow: '0 2px 8px #ccc' }} />
                       ))}
                     </div>
                     <div className="row">
@@ -549,9 +705,31 @@ function Tour() {
                       <div className="col-md-6 mb-2">
                         <b>Giờ đóng cửa:</b> <span className="ml-1">{selectedTour.closing_time || selectedTour.close_time || 'N/A'}</span>
                       </div>
-                      <div className="col-md-6 mb-2">
-                        <b>Trạng thái:</b> <span className="ml-1">{selectedTour.status === 'active' ? 'Active' : 'Deactive'}</span>
-                      </div>
+                      {isAdmin() && (
+                        <div className="col-md-6 mb-2">
+                          <b>Trạng thái:</b> 
+                          <span className={`ml-1 badge badge-${
+                            selectedTour.status === 'requested' ? 'warning' : 
+                            selectedTour.status === 'active' ? 'success' : 
+                            selectedTour.status === 'deactive' ? 'danger' : 
+                            'secondary'
+                          }`}>
+                            {selectedTour.status === 'requested' ? 'Chờ duyệt' : 
+                             selectedTour.status === 'active' ? 'Active' :
+                             selectedTour.status === 'deactive' ? 'Deactive' : selectedTour.status}
+                          </span>
+                        </div>
+                      )}
+                      {isAdmin() && (
+                        <div className="col-md-6 mb-2">
+                          <b>Nhà cung cấp:</b> <span className="ml-1">{selectedTour.supplier_id?.name || 'N/A'}</span>
+                        </div>
+                      )}
+                      {userRole === 'supplier' && (
+                        <div className="col-md-6 mb-2">
+                          <b>Trạng thái:</b> <span className="ml-1">{selectedTour.status === 'active' ? 'Active' : 'Deactive'}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="mt-3">
                       <b>Mô tả:</b>
@@ -639,7 +817,7 @@ function Tour() {
                           <input type="file" className="form-control-file" accept="image/*" multiple onChange={handleImageUpload} />
                           <div className="d-flex flex-wrap mt-2">
                             {form.image && form.image.map((img, idx) => (
-                              <img key={`form-img-${idx}-${Date.now()}`} src={img} alt="tour" style={{ width: 60, height: 40, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
+                              <img key={`form-img-${idx}-${form.name || 'new'}-${Date.now()}`} src={img} alt="tour" style={{ width: 60, height: 40, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
                             ))}
                           </div>
                         </div>
@@ -803,6 +981,59 @@ function Tour() {
                   </form>
                 )}
               </div>
+              {modalType === 'view' && selectedTour && (
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                    <i className="fas fa-times mr-1"></i>Đóng
+                  </button>
+                  {isAdmin() && selectedTour.status === 'requested' && (
+                    <>
+                      <button 
+                        type="button" 
+                        className="btn btn-success" 
+                        onClick={() => {
+                          handleApproveTour(selectedTour._id, true);
+                          setShowModal(false);
+                        }}
+                      >
+                        <i className="fas fa-check mr-1"></i>Duyệt Tour
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn btn-danger" 
+                        onClick={() => {
+                          handleApproveTour(selectedTour._id, false);
+                          setShowModal(false);
+                        }}
+                      >
+                        <i className="fas fa-times mr-1"></i>Từ chối Tour
+                      </button>
+                    </>
+                  )}
+                  {isAdmin() && (selectedTour.status === 'active' || selectedTour.status === 'deactive') && (
+                    <button 
+                      type="button" 
+                      className={`btn ${selectedTour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
+                      onClick={() => {
+                        handleToggleStatus(selectedTour._id, selectedTour.status);
+                        setShowModal(false);
+                      }}
+                    >
+                      <i className={`fas ${selectedTour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
+                      {selectedTour.status === 'active' ? 'Deactive Tour' : 'Active Tour'}
+                    </button>
+                  )}
+                  {userRole === 'supplier' && (
+                    <button 
+                      type="button" 
+                      className="btn btn-warning" 
+                      onClick={() => handleEdit(selectedTour)}
+                    >
+                      <i className="fas fa-edit mr-1"></i>Sửa Tour
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

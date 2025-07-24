@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
-import { getAllBookings, updateBookingStatus } from '../api/api';
+import { getAllBookings, updateBookingStatus, getCurrentUserRole, getUser } from '../api/api';
 import { useLocation } from 'react-router-dom';
 
 // Component hiển thị barcode mã thanh toán
@@ -40,6 +40,8 @@ function Bookings() {
   const [dateFilter, setDateFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [productTypeFilter, setProductTypeFilter] = useState('all');
+  const [userRole, setUserRole] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const bookingsPerPage = 10;
   const location = useLocation();
 
@@ -48,10 +50,32 @@ function Bookings() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getAllBookings();
-        setBookings(data);
-        setAllBookings(data); // Lưu toàn bộ bookings để lọc sau này
+        // Lấy thông tin user, role và bookings
+        const [role, userProfile, bookingsData] = await Promise.all([
+          getCurrentUserRole(),
+          getUser(),
+          getAllBookings()
+        ]);
+        
+        setUserRole(role);
+        setCurrentUserId(userProfile._id);
+        
+        // Nếu là supplier, chỉ hiển thị bookings của tours mà supplier đó cung cấp
+        if (role === 'supplier') {
+          const supplierBookings = bookingsData.filter(booking => {
+            // Kiểm tra nếu tour của booking có supplier_id trùng với current user
+            return booking.tour_id?.supplier_id === userProfile._id || 
+                   booking.tour_id?.supplier_id?._id === userProfile._id;
+          });
+          setBookings(supplierBookings);
+          setAllBookings(supplierBookings);
+        } else {
+          // Admin thì hiển thị tất cả bookings
+          setBookings(bookingsData);
+          setAllBookings(bookingsData);
+        }
       } catch (err) {
+        console.error('Error fetching data:', err);
         setError('Không thể tải danh sách booking!');
       } finally {
         setLoading(false);
@@ -300,7 +324,15 @@ function Bookings() {
         <div className="container-fluid">
           <div className="row mb-2">
             <div className="col-sm-6">
-              <h1 className="text-dark">Quản lý Booking</h1>
+              <div className="d-flex align-items-center">
+                <h1 className="text-dark mb-0">Quản lý Booking</h1>
+                {userRole === 'supplier' && (
+                  <small className="text-muted ml-3">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Hiển thị bookings cho tours của bạn cung cấp
+                  </small>
+                )}
+              </div>
             </div>
             <div className="col-sm-6">
               <ol className="breadcrumb float-sm-right">
@@ -311,13 +343,18 @@ function Bookings() {
           </div>
           {/* Tổng số booking và doanh thu tháng này */}
           <div className="row mb-2">
-            <div className="col-md-6">
+            <div className="col-md-8">
               <span className="badge badge-info" style={{fontSize: '1.1rem'}}>
-                Tổng số Booking tháng này: {totalBookingMonth}
+                {userRole === 'supplier' ? 'Booking tours của bạn tháng này' : 'Tổng số Booking tháng này'}: {totalBookingMonth}
               </span>
               <span className="badge badge-warning ml-2" style={{fontSize: '1.1rem'}}>
-                Tổng doanh thu: {totalRevenueMonth.toLocaleString('vi-VN')} VNĐ
+                {userRole === 'supplier' ? 'Doanh thu tours của bạn' : 'Tổng doanh thu'}: {totalRevenueMonth.toLocaleString('vi-VN')} VNĐ
               </span>
+            </div>
+            <div className="col-md-4">
+              <small className="text-muted">
+                {userRole === 'supplier' && `Tổng cộng: ${allBookings.length} booking${allBookings.length > 1 ? 's' : ''} cho tours của bạn`}
+              </small>
             </div>
           </div>
         </div>

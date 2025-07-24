@@ -55,7 +55,7 @@ function Login(props) {
           setError('Không thể xác thực tài khoản!');
           return;
         }
-        if (userProfile && userProfile.role === 'admin') {
+        if (userProfile && (userProfile.role === 'admin' || userProfile.role === 'supplier')) {
           if (remember) {
             localStorage.setItem('isLoggedIn', 'true');
           } else {
@@ -76,7 +76,7 @@ function Login(props) {
           });
           navigate('/dashboard');
         } else {
-          setError('Chỉ tài khoản Admin mới được đăng nhập!');
+          setError('Chỉ tài khoản Admin và Supplier mới được đăng nhập!');
           localStorage.removeItem('token');
           sessionStorage.removeItem('token');
         }

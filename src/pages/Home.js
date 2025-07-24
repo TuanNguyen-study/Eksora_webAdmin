@@ -13,6 +13,7 @@ function Home() {
   const [totalReviews, setTotalReviews] = useState(0); 
   const [latestBookings, setLatestBookings] = useState([]);
   const [latestUsers, setLatestUsers] = useState([]);
+  const [totalUsers, setTotalUsers] = useState(0); // Tổng số users (không bao gồm admin)
   const [newMembersCount, setNewMembersCount] = useState(0);
   const [monthlyBookingStats, setMonthlyBookingStats] = useState({ labels: [], data: [] });
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -54,16 +55,28 @@ function Home() {
     async function fetchLatestUsers() {
       try {
         const data = await getAllUsers();
-        const users = data.filter(u => u.role !== 'admin');
-        // Sắp xếp theo ngày tạo mới nhất
-        const sorted = users.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        
+        // Tách users theo role
+        const allNonAdminUsers = data.filter(u => u.role !== 'admin');
+        const regularUsers = data.filter(u => u.role === 'user' || !u.role); // user hoặc không có role
+        const suppliers = data.filter(u => u.role === 'supplier');
+        
+        // Sắp xếp theo ngày tạo mới nhất cho hiển thị
+        const sorted = allNonAdminUsers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
         setLatestUsers(sorted.slice(0, 8));
+        
+        // Set tổng số users (chỉ user thường, không bao gồm supplier và admin)
+        setTotalUsers(regularUsers.length);
+        // Set tổng số suppliers
+        setTotalSuppliers(suppliers.length);
+        
         // Đếm số lượng user tạo trong 1 tháng gần nhất
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-        setNewMembersCount(users.filter(u => new Date(u.createdAt) >= oneMonthAgo).length);
+        setNewMembersCount(allNonAdminUsers.filter(u => new Date(u.createdAt) >= oneMonthAgo).length);
       } catch (err) {
         setLatestUsers([]);
+        setTotalUsers(0);
         setNewMembersCount(0);
       }
     }
@@ -166,17 +179,6 @@ function Home() {
     setTotalRevenue(totalRevenue);
     setChartLoading(false);
   }, [selectedMonth, selectedYear, allBookings]);
-  useEffect(() => {
-    async function fetchTotalSuppliers() {
-      try {
-        const data = await getSuppliers();
-        setTotalSuppliers(data.length);
-      } catch (err) {
-        setTotalSuppliers(0);
-      }
-    }
-    fetchTotalSuppliers();
-  }, []);
   return (
     <>
       {/* Content Wrapper. Contains page content */}
@@ -228,7 +230,7 @@ function Home() {
                   <span className="info-box-icon"><i className="fas fa-users" /></span>
                   <div className="info-box-content">
                     <span className="info-box-text text-white">Users</span>
-                    <span className="info-box-number text-white">{latestUsers.length}</span>
+                    <span className="info-box-number text-white">{totalUsers}</span>
                   </div>
                 </div>
               </div>

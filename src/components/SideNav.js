@@ -1,11 +1,29 @@
 import { Link, useLocation } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import SideNavReviewsCount from './SideNavReviewsCount';
+import { getCurrentUserRole } from '../api/api';
 
 function SideNav({ onLogoutClick }) {
   const location = useLocation();
   const isDashboardActive = location.pathname === '/dashboard ' || location.pathname === '/';
   const isCategoryActive = location.pathname.startsWith('/tour') || location.pathname.startsWith('/vouchers');
+  
+  // State cho user role
+  const [userRole, setUserRole] = useState(null);
+
+  // Lấy thông tin role của user hiện tại
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const role = await getCurrentUserRole();
+        setUserRole(role);
+      } catch (error) {
+        console.error('Failed to get user role:', error);
+        setUserRole(null);
+      }
+    };
+    fetchUserRole();
+  }, []);
 
   // Detect sidebar mini mode
   const [isSidebarMini, setIsSidebarMini] = useState(false);
@@ -27,12 +45,14 @@ function SideNav({ onLogoutClick }) {
   }, []);
 
   // Xác định active cho từng nhóm rõ ràng
-  const isToursGroupActive = location.pathname === '/tour' || location.pathname === '/tour/' || location.pathname === '/add-tour';
+  const isToursGroupActive = location.pathname === '/tour' || location.pathname === '/tour/' || (userRole === 'supplier' && location.pathname === '/add-tour');
   const isTourListActive = location.pathname === '/tour' || location.pathname === '/tour/';
   const isAddTourActive = location.pathname === '/add-tour';
   const isCategoryGroupActive = location.pathname.startsWith('/vouchers') || location.pathname.startsWith('/users');
   const isVouchersActive = location.pathname.startsWith('/vouchers');
   const isUsersActive = location.pathname.startsWith('/users');
+  const isSuppliersGroupActive = location.pathname.startsWith('/suppliers');
+  const isCreateSupplierActive = location.pathname === '/suppliers/create';
 
   return (
     <div>
@@ -40,7 +60,14 @@ function SideNav({ onLogoutClick }) {
         {/* Brand Logo */}
         <a href="/dashboard" className="brand-link bg-light">
           <img src="/dist/img/logo.png" alt="EKSORA Logo" className="brand-image img-circle elevation-3" style={{ opacity: '.8' }} />
-          <span className="brand-text font-weight-light text-dark">EKSORA ADMIN</span>
+          <div className="d-flex flex-column">
+            <span className="brand-text font-weight-light text-dark">EKSORA ADMIN</span>
+            {userRole === 'supplier' && (
+              <small className="text-muted" style={{ fontSize: '0.75rem', marginTop: '-2px', lineHeight: '1.2' }}>
+                for Supplier
+              </small>
+            )}
+          </div>
         </a>
         {/* Sidebar */}
         <div className="sidebar bg-light" style={{ minHeight: '100vh' }}>
@@ -53,23 +80,6 @@ function SideNav({ onLogoutClick }) {
               <a href="#" className="d-block text-dark">Tuan Nguyen</a>
             </div>
           </div> */}
-          {/* SidebarSearch Form */}
-          <div className="form-inline bg-light">
-            <div className="input-group" data-widget="sidebar-search">
-              <input
-                className="form-control form-control-sidebar bg-light"
-                type="search"
-                placeholder="Search"
-                aria-label="Search"
-                style={{ color: '#212529', fontWeight: 'bold' }} // chữ đậm
-              />
-              <div className="input-group-append">
-                <button className="btn btn-sidebar bg-light" style={{ color: '#212529', fontWeight: 'bold' }}>
-                  <i className="fas fa-search fa-fw" />
-                </button>
-              </div>
-            </div>
-          </div>
           {/* Sidebar Menu */}
           <nav className="mt-2">
             <ul className="nav nav-pills nav-sidebar flex-column bg-light" data-widget="treeview" role="menu" data-accordion="false">
@@ -106,44 +116,76 @@ function SideNav({ onLogoutClick }) {
                       <p>Quản lý Tours</p>
                     </Link>
                   </li>
-                  <li className="nav-item">
-                    <Link to="/add-tour" className="nav-link text-dark" style={isAddTourActive ? { background: '#ebecec' } : {}}>
-                      <i className="far fa-circle nav-icon" />
-                      <p>Thêm Tour</p>
-                    </Link>
-                  </li>
+                  {/* Chỉ hiển thị "Thêm Tour" cho Supplier */}
+                  {userRole === 'supplier' && (
+                    <li className="nav-item">
+                      <Link to="/add-tour" className="nav-link text-dark" style={isAddTourActive ? { background: '#ebecec' } : {}}>
+                        <i className="far fa-circle nav-icon" />
+                        <p>Thêm Tour</p>
+                      </Link>
+                    </li>
+                  )}
                 </ul>
               </li>
-              {/* Danh mục khác */}
-              <li className={`nav-item menu-open${isCategoryGroupActive ? ' active' : ''}`}>
-                <button type="button" className="nav-link w-100 text-left" style={isCategoryGroupActive ? { background: '#3f6791', color: '#fff' } : {}}>
-                  <i className="fa-solid fa fa-folder"></i>
+
+              {/* Chỉ hiển thị cho Admin */}
+              {userRole === 'admin' && (
+                <>
+                  {/* Danh mục khác */}
+                  <li className={`nav-item menu-open${isCategoryGroupActive ? ' active' : ''}`}>
+                    <button type="button" className="nav-link w-100 text-left" style={isCategoryGroupActive ? { background: '#3f6791', color: '#fff' } : {}}>
+                      <i className="fa-solid fa fa-folder"></i>
+                      <i className="right fas fa-angle-left" />
+                      <p> Danh mục </p>
+                    </button>
+                    <ul className="nav nav-treeview">
+                      <li className="nav-item">
+                        <Link to="/vouchers" className="nav-link text-dark" style={isVouchersActive ? { background: '#ebecec' } : {}}>
+                          <i className="far fa-circle nav-icon" />
+                          <p>Vouchers</p>
+                        </Link>
+                      </li>
+                      <li className="nav-item">
+                        <Link to="/users" className="nav-link text-dark" style={isUsersActive ? { background: '#ebecec' } : {}}>
+                          <i className="far fa-circle nav-icon" />
+                          <p>Users</p>
+                        </Link>
+                      </li>
+                    </ul>
+                  </li>
+                </>
+              )}
+              
+              {/* Suppliers - Hiển thị cho cả Admin và Supplier */}
+              <li className={`nav-item menu-open${isSuppliersGroupActive ? ' active' : ''}`}>
+                <button type="button" className="nav-link w-100 text-left" style={isSuppliersGroupActive ? { background: '#3f6791', color: '#fff' } : {}}>
+                  <i className="fa-solid fa fa-users"></i>
                   <i className="right fas fa-angle-left" />
-                  <p> Danh mục </p>
+                  <p> Suppliers </p>
                 </button>
-                <ul className="nav nav-treeview">
-                  <li className="nav-item">
-                    <Link to="/vouchers" className="nav-link text-dark" style={isVouchersActive ? { background: '#ebecec' } : {}}>
-                      <i className="far fa-circle nav-icon" />
-                      <p>Vouchers</p>
-                    </Link>
-                  </li>
-                  <li className="nav-item">
-                    <Link to="/users" className="nav-link text-dark" style={isUsersActive ? { background: '#ebecec' } : {}}>
-                      <i className="far fa-circle nav-icon" />
-                      <p>Users</p>
-                    </Link>
-                  </li>
-                </ul>
+                {userRole === 'admin' && (
+                  <ul className="nav nav-treeview">
+                    <li className="nav-item">
+                      <Link to="/suppliers/create" className="nav-link text-dark" style={isCreateSupplierActive ? { background: '#ebecec' } : {}}>
+                        <i className="far fa-circle nav-icon" />
+                        <p>Create Supplier</p>
+                      </Link>
+                    </li>
+                  </ul>
+                )}
               </li>
-              {/* Các mục khác */}
+              
+              {/* Bookings - Hiển thị cho cả Admin và Supplier */}
               <li className="nav-item">
                 <Link to="/bookings" className="nav-link" style={location.pathname.startsWith('/bookings') ? { background: '#3f6791', color: '#fff' } : {}}>
                   <i className="nav-icon fas fa-book" style={location.pathname.startsWith('/bookings') ? { color: '#fff' } : {}}></i>
                   <p>Bookings</p>
                 </Link>
               </li>
+
+              {/* Reviews - Hiển thị cho cả Admin và Supplier */}
               <SideNavReviewsCount />
+
               {/* Nút Đăng xuất */}
               <li className="nav-item mt-3">
                 <button

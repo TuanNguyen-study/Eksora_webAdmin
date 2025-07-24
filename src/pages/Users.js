@@ -11,6 +11,8 @@ function Users() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 9;
+  // State cho bộ lọc role
+  const [roleFilter, setRoleFilter] = useState('all'); // 'all', 'user', 'supplier'
   // Thêm state cho modal và bookings
   const [selectedUser, setSelectedUser] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -36,13 +38,32 @@ function Users() {
     fetchUsers();
   }, []);
 
-  // Pagination
+  // Pagination với filter
   const indexOfLastUser = currentPage * usersPerPage;
   const indexOfFirstUser = indexOfLastUser - usersPerPage;
-  // Lọc bỏ user là admin
-  const currentUsers = users.filter(u => u.role !== 'admin').slice(indexOfFirstUser, indexOfLastUser);
-  const totalPages = Math.ceil(users.length / usersPerPage);
+  
+  // Lọc users theo role (loại bỏ admin và áp dụng filter role)
+  const filteredUsers = users.filter(u => {
+    // Luôn loại bỏ admin
+    if (u.role === 'admin') return false;
+    
+    // Áp dụng filter role
+    if (roleFilter === 'all') return true;
+    if (roleFilter === 'user') return u.role === 'user' || !u.role; // user hoặc không có role
+    if (roleFilter === 'supplier') return u.role === 'supplier';
+    
+    return true;
+  });
+  
+  const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
+  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
   const isDark = document.body.classList.contains('dark-mode');
+
+  // Hàm xử lý thay đổi filter
+  const handleRoleFilterChange = (newFilter) => {
+    setRoleFilter(newFilter);
+    setCurrentPage(1); // Reset về trang đầu khi đổi filter
+  };
 
   // Hàm xóa user
   const handleDeleteUser = async () => {
@@ -74,6 +95,29 @@ function Users() {
               </ol>
             </div>
           </div>
+          {/* Bộ lọc Role */}
+          <div className="row mb-3">
+            <div className="col-md-4">
+              <label htmlFor="roleFilter" className={`form-label ${isDark ? 'text-light' : 'text-dark'}`}>
+                Lọc theo Role:
+              </label>
+              <select 
+                id="roleFilter"
+                className="form-control"
+                value={roleFilter}
+                onChange={(e) => handleRoleFilterChange(e.target.value)}
+              >
+                <option value="all">Tất cả</option>
+                <option value="user">User</option>
+                <option value="supplier">Supplier</option>
+              </select>
+            </div>
+            <div className="col-md-8 d-flex align-items-end">
+              <div className={`text-muted ${isDark ? 'text-light' : ''}`}>
+                Hiển thị {currentUsers.length} / {filteredUsers.length} users
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <section className="content">
@@ -87,7 +131,7 @@ function Users() {
                   <div className="col-12 col-sm-6 col-md-4 d-flex align-items-stretch flex-column" key={user._id || idx}>
                     <div className="card bg-light d-flex flex-fill">
                       <div className="card-header text-muted border-bottom-0">
-                        {user.role === 'admin' ? 'Admin' : 'User'}
+                        {user.role === 'admin' ? 'Admin' : user.role === 'supplier' ? 'Supplier' : 'User'}
                       </div>
                       <div className="card-body pt-0">
                         <div className="row">
