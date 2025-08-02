@@ -37,154 +37,57 @@
   }
 }
 
-/* Vietnamese Map Styles */
-.vietnam-map-container {
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  border-radius: 8px;
-  padding: 10px;
+/* Hot Destinations Image Styles */
+.info-box .info-box-icon {
+  border-radius: 8px 0 0 8px;
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
-.vietnam-regions {
-  max-height: 200px;
-  overflow-y: auto;
+.info-box .info-box-icon img {
+  transition: transform 0.3s ease;
 }
 
-.region-item {
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.region-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.region-marker {
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-/* Hot Destinations Styles */
-.info-box {
-  transition: all 0.3s ease;
-}
-
-.info-box:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 16px rgba(0,0,0,0.15);
-}
-
-.info-box-icon {
-  transition: all 0.3s ease;
-}
-
-.info-box:hover .info-box-icon {
+.info-box:hover .info-box-icon img {
   transform: scale(1.1);
 }
 
-/* Progress bar animation */
-.progress-bar {
-  transition: width 0.6s ease;
+.info-box .fallback-icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px 0 0 8px;
 }
 
-/* Map Chart Enhancements */
-.card:hover {
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  transition: box-shadow 0.3s ease;
+/* Map Popup Styles */
+.city-popup {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Geographic Map Animations */
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  }
-  50% {
-    transform: scale(1.1);
-    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  }
+.city-popup .stat-item {
+  border: 1px solid #e3e6f0;
+  transition: transform 0.2s ease;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.city-popup .stat-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Geographic Map Specific Styles */
-.vietnam-geographic-map {
-  animation: fadeInUp 0.8s ease-out;
+.revenue-info {
+  background: linear-gradient(45deg, #ffc107, #ff8c00) !important;
 }
 
-.region-marker-geographic {
-  animation: fadeInUp 0.6s ease-out;
-}
-
-.province-detail {
-  animation: fadeInUp 1s ease-out;
-  transition: all 0.3s ease;
-}
-
-.province-detail:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-
-.marker-circle:hover {
-  transform: scale(1.2);
-  animation-play-state: paused;
-}
-
-/* Statistics Cards */
-.stat-card {
-  transition: all 0.3s ease;
-  border: none;
-}
-
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-}
-
-.destination-item {
-  transition: all 0.3s ease;
-}
-
-.destination-item:hover {
+/* Region Stats Styling */
+.region-stats .d-flex:hover {
+  background-color: #f8f9fa !important;
   transform: translateX(5px);
-  background-color: #e9ecef !important;
-}
-
-.rank-badge {
-  font-weight: bold;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .vietnam-geographic-map {
-    min-height: 300px;
-  }
-  
-  .province-detail {
-    position: relative !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    margin-bottom: 10px;
-  }
-  
-  .region-marker-geographic {
-    position: relative !important;
-    display: inline-block;
-    margin: 10px;
-  }
+  transition: all 0.2s ease;
 }

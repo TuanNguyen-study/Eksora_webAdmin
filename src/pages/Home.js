@@ -29,6 +29,68 @@ function Home() {
   const [categoryBookingData, setCategoryBookingData] = useState([]);
   const [mapChartData, setMapChartData] = useState(null);
 
+  // Helper functions for hot destinations
+  const getDestinationIcon = (categoryName) => {
+    const name = categoryName.toLowerCase();
+    if (name.includes('biển') || name.includes('beach') || name.includes('đảo')) return 'fas fa-umbrella-beach';
+    if (name.includes('núi') || name.includes('mountain') || name.includes('trekking')) return 'fas fa-mountain';
+    if (name.includes('thành phố') || name.includes('city') || name.includes('urban')) return 'fas fa-city';
+    if (name.includes('văn hóa') || name.includes('culture') || name.includes('museum')) return 'fas fa-landmark';
+    if (name.includes('ẩm thực') || name.includes('food') || name.includes('culinary')) return 'fas fa-utensils';
+    if (name.includes('lịch sử') || name.includes('history') || name.includes('historical')) return 'fas fa-monument';
+    if (name.includes('thiên nhiên') || name.includes('nature') || name.includes('forest')) return 'fas fa-tree';
+    if (name.includes('adventure') || name.includes('thể thao') || name.includes('sport')) return 'fas fa-hiking';
+    return 'fas fa-map-marker-alt';
+  };
+
+  const getVietnameseRegion = (categoryName) => {
+    const name = categoryName.toLowerCase();
+    // Miền Bắc
+    if (name.includes('hà nội') || name.includes('hanoi') || name.includes('thủ đô')) {
+      return { region: 'Miền Bắc', province: 'Hà Nội', coordinates: [21.0285, 105.8542] };
+    }
+    if (name.includes('hạ long') || name.includes('quảng ninh')) {
+      return { region: 'Miền Bắc', province: 'Quảng Ninh', coordinates: [20.9101, 107.1839] };
+    }
+    if (name.includes('sapa') || name.includes('lào cai')) {
+      return { region: 'Miền Bắc', province: 'Lào Cai', coordinates: [22.4856, 103.9707] };
+    }
+    if (name.includes('ninh bình')) {
+      return { region: 'Miền Bắc', province: 'Ninh Bình', coordinates: [20.2506, 105.9744] };
+    }
+    // Miền Trung
+    if (name.includes('đà nẵng') || name.includes('da nang')) {
+      return { region: 'Miền Trung', province: 'Đà Nẵng', coordinates: [16.0544, 108.2022] };
+    }
+    if (name.includes('hội an') || name.includes('quảng nam')) {
+      return { region: 'Miền Trung', province: 'Quảng Nam', coordinates: [15.8801, 108.338] };
+    }
+    if (name.includes('huế') || name.includes('thừa thiên')) {
+      return { region: 'Miền Trung', province: 'Thừa Thiên Huế', coordinates: [16.4637, 107.5909] };
+    }
+    if (name.includes('nha trang') || name.includes('khánh hòa')) {
+      return { region: 'Miền Trung', province: 'Khánh Hòa', coordinates: [12.2388, 109.1967] };
+    }
+    if (name.includes('đà lạt') || name.includes('lâm đồng')) {
+      return { region: 'Miền Trung', province: 'Lâm Đồng', coordinates: [11.9404, 108.4583] };
+    }
+    // Miền Nam
+    if (name.includes('hồ chí minh') || name.includes('sài gòn') || name.includes('tp.hcm') || name.includes('hcm')) {
+      return { region: 'Miền Nam', province: 'TP.HCM', coordinates: [10.8231, 106.6297] };
+    }
+    if (name.includes('vũng tàu') || name.includes('bà rịa')) {
+      return { region: 'Miền Nam', province: 'Bà Rịa - Vũng Tàu', coordinates: [10.4113, 107.1362] };
+    }
+    if (name.includes('phú quốc') || name.includes('kiên giang')) {
+      return { region: 'Miền Nam', province: 'Kiên Giang', coordinates: [10.2899, 103.9840] };
+    }
+    if (name.includes('cần thơ') || name.includes('mekong')) {
+      return { region: 'Miền Nam', province: 'Cần Thơ', coordinates: [10.0452, 105.7469] };
+    }
+    // Default to TP.HCM if can't determine
+    return { region: 'Miền Nam', province: 'TP.HCM', coordinates: [10.8231, 106.6297] };
+  };
+
   useEffect(() => {
     async function fetchRecentTours() {
       try {
@@ -186,7 +248,7 @@ function Home() {
     setChartLoading(false);
   }, [selectedMonth, selectedYear, allBookings]);
 
-  // Fetch hot destinations and category booking data
+  // New useEffect for hot destinations and category data
   useEffect(() => {
     async function fetchHotDestinationsAndCategoryData() {
       try {
@@ -219,17 +281,36 @@ function Home() {
           }
         });
 
-        // Map category names and create hot destinations
+        // Map category names and create hot destinations with random images
         const hotDestinationsData = Object.values(categoryBookings).map(cat => {
           const category = categoriesData.find(c => c._id === cat.categoryId);
           const regionInfo = getVietnameseRegion(category?.name || 'Unknown');
+          
+          // Find tours for this category to get random image
+          const categoryTours = toursData.filter(tour => {
+            const tourCateID = typeof tour.cateID === 'object' ? tour.cateID._id : tour.cateID;
+            return tourCateID === cat.categoryId && tour.image && tour.image.length > 0;
+          });
+          
+          // Get random image from tours in this category
+          let randomImage = null;
+          if (categoryTours.length > 0) {
+            const randomTour = categoryTours[Math.floor(Math.random() * categoryTours.length)];
+            if (randomTour.image && randomTour.image.length > 0) {
+              randomImage = Array.isArray(randomTour.image) 
+                ? randomTour.image[Math.floor(Math.random() * randomTour.image.length)]
+                : randomTour.image;
+            }
+          }
+          
           return {
             ...cat,
             categoryName: category?.name || 'Unknown',
             icon: getDestinationIcon(category?.name || 'Unknown'),
             region: regionInfo.region,
             province: regionInfo.province,
-            coordinates: regionInfo.coordinates
+            coordinates: regionInfo.coordinates,
+            randomImage: randomImage
           };
         }).sort((a, b) => b.bookingCount - a.bookingCount).slice(0, 6);
 
@@ -251,38 +332,42 @@ function Home() {
           regionStats[dest.region].bookings += dest.bookingCount;
           regionStats[dest.region].guests += dest.totalGuests;
           regionStats[dest.region].revenue += dest.totalRevenue;
-          regionStats[dest.region].provinces.push({
-            name: dest.province,
-            bookings: dest.bookingCount,
-            coordinates: dest.coordinates
-          });
+          if (!regionStats[dest.region].provinces.includes(dest.province)) {
+            regionStats[dest.region].provinces.push(dest.province);
+          }
         });
 
-        const chartData = {
-          labels: Object.keys(regionStats),
-          datasets: [{
-            label: 'Số lượng booking theo vùng',
-            data: Object.values(regionStats).map(region => region.bookings),
-            backgroundColor: [
-              '#FF6B6B', // Miền Bắc - Red
-              '#4ECDC4', // Miền Trung - Teal
-              '#45B7D1', // Miền Nam - Blue
-              '#FFA07A', // Additional colors if needed
-              '#98D8C8',
-              '#F7DC6F'
-            ],
-            borderWidth: 3,
-            borderColor: '#fff',
-            hoverBorderWidth: 4,
-            hoverBorderColor: '#333'
-          }]
-        };
-        setMapChartData({ chartData, regionStats });
+        // Create chart data for regions
+        const regionNames = Object.keys(regionStats);
+        const regionBookings = regionNames.map(region => regionStats[region].bookings);
+        
+        if (regionNames.length > 0) {
+          setMapChartData({
+            regionStats,
+            chartData: {
+              labels: regionNames,
+              datasets: [{
+                data: regionBookings,
+                backgroundColor: [
+                  '#FF6B6B', // Miền Bắc - Red
+                  '#4ECDC4', // Miền Trung - Teal  
+                  '#45B7D1', // Miền Nam - Blue
+                  '#96CEB4', // Extra colors if needed
+                  '#FFEAA7',
+                  '#DDA0DD'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+              }]
+            }
+          });
+        }
 
       } catch (error) {
         console.error('Error fetching hot destinations data:', error);
         setHotDestinations([]);
         setCategoryBookingData([]);
+        setMapChartData(null);
       }
     }
 
@@ -290,53 +375,6 @@ function Home() {
       fetchHotDestinationsAndCategoryData();
     }
   }, [allBookings]);
-
-  // Helper function to get destination icons
-  const getDestinationIcon = (categoryName) => {
-    const name = categoryName.toLowerCase();
-    if (name.includes('beach') || name.includes('biển') || name.includes('đảo')) return 'fas fa-umbrella-beach';
-    if (name.includes('mountain') || name.includes('núi') || name.includes('đồi')) return 'fas fa-mountain';
-    if (name.includes('city') || name.includes('thành phố') || name.includes('urban')) return 'fas fa-city';
-    if (name.includes('temple') || name.includes('chùa') || name.includes('đền')) return 'fas fa-place-of-worship';
-    if (name.includes('forest') || name.includes('rừng') || name.includes('park')) return 'fas fa-tree';
-    if (name.includes('adventure') || name.includes('thám hiểm') || name.includes('sport')) return 'fas fa-hiking';
-    if (name.includes('food') || name.includes('ẩm thực') || name.includes('cuisine')) return 'fas fa-utensils';
-    if (name.includes('culture') || name.includes('văn hóa') || name.includes('museum')) return 'fas fa-landmark';
-    if (name.includes('water') || name.includes('nước') || name.includes('river')) return 'fas fa-water';
-    return 'fas fa-map-marker-alt'; // Default icon
-  };
-
-  // Helper function to get Vietnamese region from category/location
-  const getVietnameseRegion = (categoryName) => {
-    const name = categoryName.toLowerCase();
-    
-    // Miền Bắc
-    if (name.includes('hà nội') || name.includes('hanoi') || name.includes('thủ đô')) return { region: 'Miền Bắc', province: 'Hà Nội', coordinates: [21.0285, 105.8542] };
-    if (name.includes('hạ long') || name.includes('quảng ninh')) return { region: 'Miền Bắc', province: 'Quảng Ninh', coordinates: [20.9101, 107.1839] };
-    if (name.includes('sapa') || name.includes('lào cai')) return { region: 'Miền Bắc', province: 'Lào Cai', coordinates: [22.4856, 103.9707] };
-    if (name.includes('ninh bình')) return { region: 'Miền Bắc', province: 'Ninh Bình', coordinates: [20.2506, 105.9744] };
-    if (name.includes('hải phòng')) return { region: 'Miền Bắc', province: 'Hải Phòng', coordinates: [20.8449, 106.6881] };
-    
-    // Miền Trung
-    if (name.includes('huế') || name.includes('thừa thiên')) return { region: 'Miền Trung', province: 'Thừa Thiên Huế', coordinates: [16.4637, 107.5909] };
-    if (name.includes('hội an') || name.includes('quảng nam')) return { region: 'Miền Trung', province: 'Quảng Nam', coordinates: [15.8801, 108.338] };
-    if (name.includes('đà nẵng')) return { region: 'Miền Trung', province: 'Đà Nẵng', coordinates: [16.0544, 108.2022] };
-    if (name.includes('nha trang') || name.includes('khánh hòa')) return { region: 'Miền Trung', province: 'Khánh Hòa', coordinates: [12.2388, 109.1967] };
-    if (name.includes('phú yên')) return { region: 'Miền Trung', province: 'Phú Yên', coordinates: [13.0882, 109.0929] };
-    if (name.includes('quy nhon') || name.includes('bình định')) return { region: 'Miền Trung', province: 'Bình Định', coordinates: [13.7563, 109.2297] };
-    
-    // Miền Nam
-    if (name.includes('hồ chí minh') || name.includes('sài gòn') || name.includes('tp hcm')) return { region: 'Miền Nam', province: 'TP.HCM', coordinates: [10.8231, 106.6297] };
-    if (name.includes('vũng tàu') || name.includes('bà rịa')) return { region: 'Miền Nam', province: 'Bà Rịa - Vũng Tàu', coordinates: [10.4113, 107.1362] };
-    if (name.includes('đà lạt') || name.includes('lâm đồng')) return { region: 'Miền Nam', province: 'Lâm Đồng', coordinates: [11.9404, 108.4583] };
-    if (name.includes('phú quốc') || name.includes('kiên giang')) return { region: 'Miền Nam', province: 'Kiên Giang', coordinates: [10.2899, 103.9840] };
-    if (name.includes('cần thơ')) return { region: 'Miền Nam', province: 'Cần Thơ', coordinates: [10.0452, 105.7469] };
-    if (name.includes('mỹ tho') || name.includes('tiền giang')) return { region: 'Miền Nam', province: 'Tiền Giang', coordinates: [10.3600, 106.3552] };
-    
-    // Default to Ho Chi Minh City if no specific match
-    return { region: 'Miền Nam', province: 'TP.HCM', coordinates: [10.8231, 106.6297] };
-  };
-
   return (
     <>
       {/* Content Wrapper. Contains page content */}
@@ -403,200 +441,6 @@ function Home() {
               </div>
             </div>
             {/* /.row */}
-            
-            {/* Hot Destinations Section */}
-            <div className="row">
-              <div className="col-md-8">
-                <div className="card bg-white border-light">
-                  <div className="card-header bg-light border-bottom-0">
-                    <h5 className="card-title text-dark">
-                      <i className="fas fa-fire text-danger mr-2"></i>
-                      Điểm Đến Hot Nhất
-                    </h5>
-                  </div>
-                  <div className="card-body">
-                    <div className="row">
-                      {hotDestinations.map((destination, index) => (
-                        <div key={destination.categoryId} className="col-md-4 col-sm-6 mb-3">
-                          <div className="info-box bg-gradient-light shadow-sm">
-                            <span className="info-box-icon bg-gradient-primary">
-                              <i className={`${destination.icon} text-white`}></i>
-                            </span>
-                            <div className="info-box-content">
-                              <span className="info-box-text text-dark font-weight-bold">
-                                {destination.categoryName}
-                              </span>
-                              <span className="info-box-number text-primary">
-                                {destination.bookingCount} tours
-                              </span>
-                              <div className="mb-1">
-                                <small className="text-muted">
-                                  <i className="fas fa-map-marker-alt mr-1"></i>
-                                  {destination.province} - {destination.region}
-                                </small>
-                              </div>
-                              <div className="progress">
-                                <div 
-                                  className="progress-bar bg-primary" 
-                                  style={{ 
-                                    width: `${Math.min((destination.bookingCount / Math.max(...hotDestinations.map(d => d.bookingCount)) * 100), 100)}%` 
-                                  }}
-                                ></div>
-                              </div>
-                              <span className="progress-description text-muted">
-                                <i className="fas fa-users mr-1"></i>
-                                {destination.totalGuests} khách
-                                {destination.totalRevenue > 0 && (
-                                  <span className="ml-2 text-success">
-                                    <i className="fas fa-dollar-sign"></i>
-                                    {destination.totalRevenue.toLocaleString()}đ
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Map Chart Section */}
-              <div className="col-md-4">
-                <div className="card bg-white border-light">
-                  <div className="card-header bg-light border-bottom-0">
-                    <h5 className="card-title text-dark">
-                      <i className="fas fa-chart-pie text-info mr-2"></i>
-                      Bản Đồ Booking Việt Nam
-                    </h5>
-                  </div>
-                  <div className="card-body">
-                    {mapChartData && mapChartData.chartData && (
-                      <>
-                        <div style={{ position: 'relative', height: '250px', marginBottom: '15px' }}>
-                          <Doughnut 
-                            data={mapChartData.chartData}
-                            options={{
-                              responsive: true,
-                              maintainAspectRatio: false,
-                              plugins: {
-                                legend: {
-                                  position: 'bottom',
-                                  labels: {
-                                    boxWidth: 12,
-                                    font: {
-                                      size: 11
-                                    },
-                                    generateLabels: function(chart) {
-                                      const data = chart.data;
-                                      if (data.labels.length && data.datasets.length) {
-                                        return data.labels.map((label, i) => {
-                                          const regionData = mapChartData.regionStats[label];
-                                          return {
-                                            text: `${label} (${regionData.bookings})`,
-                                            fillStyle: data.datasets[0].backgroundColor[i],
-                                            strokeStyle: data.datasets[0].borderColor,
-                                            lineWidth: data.datasets[0].borderWidth,
-                                            hidden: false,
-                                            index: i
-                                          };
-                                        });
-                                      }
-                                      return [];
-                                    }
-                                  }
-                                },
-                                tooltip: {
-                                  callbacks: {
-                                    label: function(context) {
-                                      const region = context.label;
-                                      const regionData = mapChartData.regionStats[region];
-                                      return [
-                                        `${region}: ${context.parsed} booking`,
-                                        `Tổng khách: ${regionData.guests} người`,
-                                        `Doanh thu: ${regionData.revenue.toLocaleString()}đ`,
-                                        `Tỉnh/thành: ${regionData.provinces.length}`
-                                      ];
-                                    }
-                                  }
-                                }
-                              }
-                            }}
-                          />
-                        </div>
-                        
-                        {/* Vietnam Map Visualization */}
-                        <div className="vietnam-map-container">
-                          <div className="text-center mb-2">
-                            <small className="text-muted font-weight-bold">Phân Bố Theo Vùng</small>
-                          </div>
-                          <div className="vietnam-regions">
-                            {Object.entries(mapChartData.regionStats).map(([regionName, regionData], index) => (
-                              <div key={regionName} className="region-item d-flex align-items-center justify-content-between mb-2 p-2 rounded" 
-                                   style={{ backgroundColor: mapChartData.chartData.datasets[0].backgroundColor[index] + '20', border: `2px solid ${mapChartData.chartData.datasets[0].backgroundColor[index]}` }}>
-                                <div className="d-flex align-items-center">
-                                  <div className="region-marker mr-2" 
-                                       style={{ 
-                                         width: '12px', 
-                                         height: '12px', 
-                                         backgroundColor: mapChartData.chartData.datasets[0].backgroundColor[index],
-                                         borderRadius: '50%'
-                                       }}>
-                                  </div>
-                                  <div>
-                                    <div className="font-weight-bold text-dark" style={{ fontSize: '12px' }}>
-                                      {regionName}
-                                    </div>
-                                    <div className="text-muted" style={{ fontSize: '10px' }}>
-                                      {regionData.provinces.length} tỉnh/thành
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-primary font-weight-bold" style={{ fontSize: '12px' }}>
-                                    {regionData.bookings}
-                                  </div>
-                                  <div className="text-muted" style={{ fontSize: '10px' }}>
-                                    tours
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {(!mapChartData || !mapChartData.chartData || hotDestinations.length === 0) && (
-                      <div className="text-center text-muted py-4">
-                        <i className="fas fa-map-marked-alt fa-3x mb-3"></i>
-                        <p>Chưa có dữ liệu booking để hiển thị trên bản đồ</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* /.row */}
-            
-            {/* Vietnamese Geographic Map Section */}
-            <div className="row">
-              <div className="col-md-12">
-                <div className="card bg-white border-light">
-                  <div className="card-header bg-light border-bottom-0">
-                    <h5 className="card-title text-dark">
-                      <i className="fas fa-map-marked-alt text-success mr-2"></i>
-                      Bản Đồ Việt Nam
-                    </h5>
-                  </div>
-                  <div className="card-body">
-                    <VietnamMap allBookings={allBookings} />
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* /.row */}
-            
             <div className="row">
               <div className="col-md-12">
                 <div className="card bg-white border-light">
@@ -783,6 +627,208 @@ function Home() {
                 {/* /.card */}
               </div>
               {/* /.col */}
+            </div>
+            {/* /.row */}
+            
+            {/* Hot Destinations Section */}
+            <div className="row">
+              <div className="col-md-8">
+                <div className="card bg-white border-light">
+                  <div className="card-header bg-light border-bottom-0">
+                    <h5 className="card-title text-dark">
+                      <i className="fas fa-fire text-danger mr-2"></i>
+                      Điểm Đến Hot Nhất
+                    </h5>
+                  </div>
+                  <div className="card-body">
+                    <div className="row">
+                      {hotDestinations.map((destination, index) => (
+                        <div key={destination.categoryId} className="col-md-4 col-sm-6 mb-3">
+                          <div className="info-box bg-gradient-light shadow-sm">
+                            {destination.randomImage ? (
+                              <span className="info-box-icon" style={{ padding: '0', overflow: 'hidden' }}>
+                                <img 
+                                  src={destination.randomImage} 
+                                  alt={destination.categoryName}
+                                  style={{ 
+                                    width: '100%', 
+                                    height: '100%', 
+                                    objectFit: 'cover',
+                                    borderRadius: '8px 0 0 8px'
+                                  }}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextSibling.style.display = 'flex';
+                                  }}
+                                />
+                                <div 
+                                  className="fallback-icon bg-gradient-primary"
+                                  style={{ 
+                                    display: 'none',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '100%',
+                                    height: '100%'
+                                  }}
+                                >
+                                  <i className={`${destination.icon} text-white`}></i>
+                                </div>
+                              </span>
+                            ) : (
+                              <span className="info-box-icon bg-gradient-primary">
+                                <i className={`${destination.icon} text-white`}></i>
+                              </span>
+                            )}
+                            <div className="info-box-content">
+                              <span className="info-box-text text-dark font-weight-bold">
+                                {destination.categoryName}
+                              </span>
+                              <span className="info-box-number text-primary">
+                                {destination.bookingCount} tours
+                              </span>
+                              <div className="mb-1">
+                                <small className="text-muted">
+                                  <i className="fas fa-map-marker-alt mr-1"></i>
+                                  {destination.province} - {destination.region}
+                                </small>
+                              </div>
+                              <div className="progress">
+                                <div 
+                                  className="progress-bar bg-primary" 
+                                  style={{ 
+                                    width: `${Math.min((destination.bookingCount / Math.max(...hotDestinations.map(d => d.bookingCount)) * 100), 100)}%` 
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="progress-description text-muted">
+                                <i className="fas fa-users mr-1"></i>
+                                {destination.totalGuests} khách
+                                {destination.totalRevenue > 0 && (
+                                  <span className="ml-2 text-success">
+                                    <i className="fas fa-dollar-sign"></i>
+                                    {destination.totalRevenue.toLocaleString()}đ
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Map Chart Section */}
+              <div className="col-md-4">
+                <div className="card bg-white border-light">
+                  <div className="card-header bg-light border-bottom-0">
+                    <h5 className="card-title text-dark">
+                      <i className="fas fa-chart-pie text-info mr-2"></i>
+                      Phân Bố Booking Theo Vùng
+                    </h5>
+                  </div>
+                  <div className="card-body">
+                    {mapChartData && mapChartData.chartData && (
+                      <>
+                        <div style={{ position: 'relative', height: '250px', marginBottom: '15px' }}>
+                          <Doughnut 
+                            data={mapChartData.chartData}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  position: 'bottom',
+                                  labels: {
+                                    boxWidth: 12,
+                                    font: {
+                                      size: 11
+                                    },
+                                    generateLabels: function(chart) {
+                                      const data = chart.data;
+                                      if (data.labels.length && data.datasets.length) {
+                                        return data.labels.map((label, i) => {
+                                          const regionData = mapChartData.regionStats[label];
+                                          return {
+                                            text: `${label} (${regionData.bookings})`,
+                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            strokeStyle: data.datasets[0].borderColor,
+                                            lineWidth: data.datasets[0].borderWidth,
+                                            hidden: false,
+                                            index: i
+                                          };
+                                        });
+                                      }
+                                      return [];
+                                    }
+                                  }
+                                },
+                                tooltip: {
+                                  callbacks: {
+                                    label: function(context) {
+                                      const regionName = context.label;
+                                      const regionData = mapChartData.regionStats[regionName];
+                                      return [
+                                        `${regionName}: ${context.parsed} booking`,
+                                        `Khách: ${regionData.guests.toLocaleString()}`,
+                                        `Doanh thu: ${regionData.revenue.toLocaleString()}đ`
+                                      ];
+                                    }
+                                  }
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                        
+                        {/* Region Statistics */}
+                        <div className="region-stats">
+                          {Object.entries(mapChartData.regionStats).map(([region, stats]) => (
+                            <div key={region} className="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
+                              <div>
+                                <strong className="text-dark">{region}</strong>
+                                <br/>
+                                <small className="text-muted">{stats.provinces.join(', ')}</small>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-primary font-weight-bold">{stats.bookings}</div>
+                                <small className="text-muted">booking</small>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {(!mapChartData || !mapChartData.chartData || hotDestinations.length === 0) && (
+                      <div className="text-center text-muted py-4">
+                        <i className="fas fa-chart-pie fa-3x mb-3"></i>
+                        <h6>Chưa có dữ liệu</h6>
+                        <p>Khi có booking, biểu đồ sẽ hiển thị phân bố theo vùng miền</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* /.row */}
+            
+            {/* Vietnamese Geographic Map Section */}
+            <div className="row">
+              <div className="col-md-12">
+                <div className="card bg-white border-light">
+                  <div className="card-header bg-light border-bottom-0">
+                    <h5 className="card-title text-dark">
+                      <i className="fas fa-map-marked-alt text-success mr-2"></i>
+                      Bản Đồ Việt Nam - Thống Kê Booking
+                    </h5>
+                  </div>
+                  <div className="card-body">
+                    <VietnamMap allBookings={allBookings} />
+                  </div>
+                </div>
+              </div>
             </div>
             {/* /.row */}
              {/* Calendar riêng một dòng */}

@@ -3,15 +3,20 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+// Import marker images explicitly
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
 // Fix for default markers in React Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
-  iconUrl: require('leaflet/dist/images/marker-icon.png'),
-  shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
 });
 
-// Simplified Vietnamese major cities with expanded locations
+// Vietnamese major cities with expanded locations
 const majorCities = [
   { name: 'Hà Nội', coords: [21.0285, 105.8542], region: 'Miền Bắc', searchKeys: ['hà nội', 'hanoi', 'thủ đô'] },
   { name: 'Hạ Long', coords: [20.9101, 107.1839], region: 'Miền Bắc', searchKeys: ['hạ long', 'quảng ninh', 'halong'] },
@@ -37,6 +42,8 @@ const VietnamMap = ({ allBookings = [] }) => {
   ];
 
   useEffect(() => {
+    console.log('VietnamMap allBookings:', allBookings.length);
+    
     // Process booking data to match with cities
     const cityData = majorCities.map(city => {
       const cityBookings = allBookings.filter(booking => {
@@ -68,6 +75,7 @@ const VietnamMap = ({ allBookings = [] }) => {
       };
     });
 
+    console.log('VietnamMap cityData:', cityData);
     setCityBookingData(cityData);
   }, [allBookings]);
 
@@ -86,89 +94,93 @@ const VietnamMap = ({ allBookings = [] }) => {
           </div>
         </div>
         <div className="card-body">
-          <MapContainer
-            bounds={vietnamBounds}
-            style={{ height: '400px', width: '100%', borderRadius: '8px' }}
-            className="vietnam-map"
-            maxBounds={vietnamBounds}
-            maxBoundsViscosity={1.0}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              maxZoom={10}
-              minZoom={5}
-            />
-            
-            {/* Cities with booking data */}
-            {cityBookingData.map((city, index) => (
-              <Marker
-                key={index}
-                position={city.coords}
-              >
-                <Popup maxWidth={300}>
-                  <div className="city-popup">
-                    <h6 className="mb-2 text-primary font-weight-bold">
-                      <i className="fas fa-map-marker-alt mr-2"></i>
-                      {city.name}
-                    </h6>
-                    <p className="mb-2 text-muted small">{city.region}</p>
-                    
-                    {city.bookingCount > 0 ? (
-                      <div className="booking-stats">
-                        <div className="row mb-2">
-                          <div className="col-6">
-                            <div className="stat-item text-center p-2 bg-light rounded">
-                              <div className="text-primary font-weight-bold">{city.bookingCount}</div>
-                              <small className="text-muted">Booking</small>
+          <div style={{ height: '400px', width: '100%', position: 'relative' }}>
+            <MapContainer
+              bounds={vietnamBounds}
+              style={{ height: '100%', width: '100%', borderRadius: '8px' }}
+              className="vietnam-map"
+              maxBounds={vietnamBounds}
+              maxBoundsViscosity={1.0}
+              zoom={6}
+              center={[16.0583, 108.2772]}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                maxZoom={18}
+                minZoom={5}
+              />
+              
+              {/* Cities with booking data */}
+              {cityBookingData.map((city, index) => (
+                <Marker
+                  key={index}
+                  position={city.coords}
+                >
+                  <Popup maxWidth={300}>
+                    <div className="city-popup">
+                      <h6 className="mb-2 text-primary font-weight-bold">
+                        <i className="fas fa-map-marker-alt mr-2"></i>
+                        {city.name}
+                      </h6>
+                      <p className="mb-2 text-muted small">{city.region}</p>
+                      
+                      {city.bookingCount > 0 ? (
+                        <div className="booking-stats">
+                          <div className="row mb-2">
+                            <div className="col-6">
+                              <div className="stat-item text-center p-2 bg-light rounded">
+                                <div className="text-primary font-weight-bold">{city.bookingCount}</div>
+                                <small className="text-muted">Booking</small>
+                              </div>
+                            </div>
+                            <div className="col-6">
+                              <div className="stat-item text-center p-2 bg-light rounded">
+                                <div className="text-success font-weight-bold">{city.totalGuests}</div>
+                                <small className="text-muted">Khách</small>
+                              </div>
                             </div>
                           </div>
-                          <div className="col-6">
-                            <div className="stat-item text-center p-2 bg-light rounded">
-                              <div className="text-success font-weight-bold">{city.totalGuests}</div>
-                              <small className="text-muted">Khách</small>
+                          
+                          {city.totalRevenue > 0 && (
+                            <div className="revenue-info text-center p-2 bg-warning text-white rounded mb-2">
+                              <strong>{city.totalRevenue.toLocaleString()}đ</strong>
+                              <br/>
+                              <small>Tổng doanh thu</small>
                             </div>
+                          )}
+                          
+                          <div className="recent-tours">
+                            <strong className="text-dark">Tours gần đây:</strong>
+                            <ul className="list-unstyled mt-1 mb-0">
+                              {city.bookings.slice(0, 3).map((booking, idx) => (
+                                <li key={idx} className="small text-muted">
+                                  • {booking.tour_id?.name || 'Tour không xác định'}
+                                  <br/>
+                                  <span className="text-primary">
+                                    {new Date(booking.booking_date).toLocaleDateString('vi-VN')}
+                                  </span>
+                                </li>
+                              ))}
+                              {city.bookings.length > 3 && (
+                                <li className="small text-info">...và {city.bookings.length - 3} booking khác</li>
+                              )}
+                            </ul>
                           </div>
                         </div>
-                        
-                        {city.totalRevenue > 0 && (
-                          <div className="revenue-info text-center p-2 bg-warning text-white rounded mb-2">
-                            <strong>{city.totalRevenue.toLocaleString()}đ</strong>
-                            <br/>
-                            <small>Tổng doanh thu</small>
-                          </div>
-                        )}
-                        
-                        <div className="recent-tours">
-                          <strong className="text-dark">Tours gần đây:</strong>
-                          <ul className="list-unstyled mt-1 mb-0">
-                            {city.bookings.slice(0, 3).map((booking, idx) => (
-                              <li key={idx} className="small text-muted">
-                                • {booking.tour_id?.name || 'Tour không xác định'}
-                                <br/>
-                                <span className="text-primary">
-                                  {new Date(booking.booking_date).toLocaleDateString('vi-VN')}
-                                </span>
-                              </li>
-                            ))}
-                            {city.bookings.length > 3 && (
-                              <li className="small text-info">...và {city.bookings.length - 3} booking khác</li>
-                            )}
-                          </ul>
+                      ) : (
+                        <div className="text-center text-muted py-2">
+                          <i className="fas fa-calendar-times mb-2"></i>
+                          <br/>
+                          <small>Chưa có booking nào</small>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="text-center text-muted py-2">
-                        <i className="fas fa-calendar-times mb-2"></i>
-                        <br/>
-                        <small>Chưa có booking nào</small>
-                      </div>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          </div>
           
           {/* Enhanced legend with stats */}
           <div className="mt-3">
