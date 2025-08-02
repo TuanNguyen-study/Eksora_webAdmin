@@ -11,3 +11,68 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Leaflet Map Styles */
+@import '~leaflet/dist/leaflet.css';
+
+/* Simple Map Styles */
+.vietnam-map {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.leaflet-popup-content {
+  margin: 8px 12px;
+  font-size: 13px;
+  max-width: 250px;
+}
+
+.leaflet-popup-content h6 {
+  margin-bottom: 8px;
+  color: #007bff;
+}
+
+.leaflet-tooltip {
+  background-color: rgba(0,0,0,0.8);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+/* City popup styles */
+.city-popup .stat-item {
+  transition: background-color 0.2s;
+}
+
+.city-popup .stat-item:hover {
+  background-color: #e9ecef !important;
+}
+
+.city-popup .booking-stats {
+  margin-top: 8px;
+}
+
+.city-popup .recent-tours ul {
+  max-height: 120px;
+  overflow-y: auto;
+  padding-left: 0;
+}
+
+.city-popup .recent-tours li {
+  margin-bottom: 4px;
+  padding: 2px 0;
+  border-bottom: 1px solid #f8f9fa;
+}
+
+/* Map container responsive */
+@media (max-width: 768px) {
+  .leaflet-container {
+    height: 300px !important;
+  }
+  
+  .leaflet-popup-content {
+    max-width: 200px;
+  }
+}
