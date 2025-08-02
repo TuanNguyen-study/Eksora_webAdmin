@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTours, getCategories, getSuppliers, updateTour, getToursByRole, approveTour, toggleTourStatus, getCurrentUserRole, getUser, testEndpoints } from '../api/api';
+import { getTours, getCategories, getSuppliers, updateTour, deleteTour, getToursByRole, getSupplierTours, approveTour, toggleTourStatus, getCurrentUserRole, getUser, testEndpoints, debugSupplierTours } from '../api/api';
 import { FaTag, FaClock, FaList, FaMapMarkerAlt, FaImage, FaAlignLeft, FaCheckCircle } from 'react-icons/fa';
 import { uploadImageToCloudinary } from '../api/cloudinary';
 import CkeditorField from '../components/CkeditorField';
@@ -28,6 +28,7 @@ function Tour() {
     description: '',
     price: '',
     price_child: '',
+    max_tickets_per_day: '',
     image: [''],
     location: '',
     rating: '',
@@ -54,6 +55,12 @@ function Tour() {
   const [provinceList, setProvinceList] = useState([]);
   const [userRole, setUserRole] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  
+  // Thêm state cho bộ lọc giá
+  const [priceFilter, setPriceFilter] = useState({
+    minPrice: '',
+    maxPrice: ''
+  });
 
   // Helper function để kiểm tra quyền admin
   const isAdmin = () => userRole === 'admin';
@@ -80,12 +87,48 @@ function Tour() {
         console.log('Sample tour IDs:');
         data.slice(0, 5).forEach((tour, index) => {
           console.log(`Tour ${index + 1}: ID=${tour._id}, Name=${tour.name}, Status=${tour.status}`);
+          console.log(`  Time data: opening_time=${tour.opening_time}, closing_time=${tour.closing_time}`);
+          console.log(`  Legacy time data: open_time=${tour.open_time}, close_time=${tour.close_time}`);
         });
+        console.log('Full tours data:', data);
         console.log('====================================');
         
+        console.log('=== FILTER DEBUG ===');
+        console.log('selectedCategory:', selectedCategory);
+        console.log('selectedMonth:', selectedMonth);
+        console.log('selectedYear:', selectedYear);
+        console.log('priceFilter:', priceFilter);
+        console.log('====================');
+        
+        // TEMPORARY: Enable only price filter for now
+        console.log('=== APPLYING PRICE FILTER ONLY ===');
+        
+        // Lọc theo giá từ bộ lọc người dùng thiết lập
+        if (priceFilter.minPrice || priceFilter.maxPrice) {
+          console.log('Applying price filter...');
+          const beforeFilter = data.length;
+          data = data.filter(t => {
+            const price = Number(t.price) || 0;
+            const min = priceFilter.minPrice ? Number(priceFilter.minPrice.replace(/\./g, '')) : 0;
+            const max = priceFilter.maxPrice ? Number(priceFilter.maxPrice.replace(/\./g, '')) : Infinity;
+            const match = price >= min && price <= max;
+            console.log(`Tour ${t.name}: price=${price}, min=${min}, max=${max}, match=${match}`);
+            return match;
+          });
+          console.log(`Price filter: ${beforeFilter} -> ${data.length} tours`);
+        }
+        
+        /*
         // Lọc theo danh mục nếu có chọn
         if (selectedCategory) {
-          data = data.filter(t => t.cateID && (t.cateID._id === selectedCategory || t.cateID.name === selectedCategory));
+          console.log('Filtering by category...');
+          const beforeFilter = data.length;
+          data = data.filter(t => {
+            const match = t.cateID && (t.cateID._id === selectedCategory || t.cateID.name === selectedCategory);
+            console.log(`Tour ${t.name}: cateID=${t.cateID?._id}, match=${match}`);
+            return match;
+          });
+          console.log(`Category filter: ${beforeFilter} -> ${data.length} tours`);
         }
         // Lọc theo tháng/năm nếu có chọn
         if (selectedMonth && selectedYear) {
@@ -126,6 +169,7 @@ function Tour() {
             data = data.filter(t => t.instantConfirm === true);
           }
         }
+        */
         // Tìm min/max giá từ dữ liệu (sau khi lọc)
         if (data.length > 0) {
           const prices = data.map(t => Number(t.price) || 0);
@@ -135,6 +179,10 @@ function Tour() {
           setMaxPrice(max);
           setPriceRange(prev => (prev[0] === 0 && prev[1] === 10000000) ? [min, max] : prev);
         }
+        console.log('=== FINAL TOURS BEFORE SET STATE ===');
+        console.log('Final tours count:', data.length);
+        console.log('Final tours data:', data);
+        console.log('=====================================');
         setTours(data);
         // Lấy danh sách province duy nhất từ tất cả tour
         const provinces = [...new Set(data.map(t => t.province).filter(Boolean))];
@@ -178,7 +226,7 @@ function Tour() {
       console.error('Error loading suppliers:', error);
       setSuppliers([]);
     });
-  }, [selectedCategory, selectedMonth, selectedYear, priceRange, tourFilter, selectedProvince, selectedCategoryForProvince]);
+  }, [selectedCategory, selectedMonth, selectedYear, priceRange, tourFilter, selectedProvince, selectedCategoryForProvince, priceFilter]);
 
   const handleView = (tour) => {
     setSelectedTour(tour);
@@ -191,6 +239,8 @@ function Tour() {
     console.log('Selected tour object:', tour);
     console.log('Tour ID:', tour._id);
     console.log('Tour ID type:', typeof tour._id);
+    console.log('Tour cateID:', tour.cateID);
+    console.log('Tour cateID type:', typeof tour.cateID);
     console.log('=======================');
     
     setSelectedTour(tour);
@@ -204,9 +254,31 @@ function Tour() {
     setShowModal(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Bạn có chắc muốn xóa tour này?')) {
-      setTours(tours.filter(t => t._id !== id));
+      try {
+        console.log('=== DELETE TOUR DEBUG ===');
+        console.log('Deleting tour with ID:', id);
+        console.log('ID type:', typeof id);
+        console.log('========================');
+        
+        await deleteTour(id);
+        
+        // Reload tours list after successful deletion
+        console.log('Reloading tours after deletion...');
+        const refreshedTours = await getToursByRole();
+        if (refreshedTours && Array.isArray(refreshedTours)) {
+          setTours(refreshedTours);
+        } else {
+          // Fallback to local deletion if refresh fails
+          setTours(tours.filter(t => t._id !== id));
+        }
+        
+        console.log('Tour deleted successfully');
+      } catch (error) {
+        console.error('Error deleting tour:', error);
+        // Error toast is already handled in the API function
+      }
     }
   };
 
@@ -356,6 +428,7 @@ function Tour() {
           description: form.description,
           price: typeof form.price === 'string' ? Number(form.price.replace(/\./g, '')) : Number(form.price),
           price_child: typeof form.price_child === 'string' ? Number(form.price_child.replace(/\./g, '')) : Number(form.price_child),
+          max_tickets_per_day: Number(form.max_tickets_per_day) || 1,
           image: Array.isArray(form.image) ? form.image : [form.image || ''],
           cateID: form.cateID?._id || null,
           supplier_id: form.supplier_id?._id || null,
@@ -367,19 +440,64 @@ function Tour() {
             type: service.type,
             options: (service.options || []).map(option => ({
               title: option.title,
-              price_extra: Number(option.price_extra) || 0
+              price_extra: Number(option.price_extra) || 0,
+              description: option.description || ''
             }))
           }))
         };
         
         console.log('Data being sent to API:', updateData);
+        console.log('Form cateID object:', form.cateID);
+        console.log('Original tour cateID:', selectedTour.cateID);
         console.log('Tour ID being sent:', selectedTour._id);
         console.log('API call: updateTour(' + selectedTour._id + ', updateData)');
         console.log('========================');
         
         const updated = await updateTour(selectedTour._id, updateData);
-        setTours(tours.map(t => t._id === selectedTour._id ? updated : t));
+        
+        console.log('API Response:', updated);
+        console.log('API Response cateID type:', typeof updated.cateID);
+        console.log('API Response cateID value:', updated.cateID);
+        
+        // Ensure we have complete data structure, merge with current form data if needed
+        const updatedTour = {
+          ...selectedTour,  // Keep original data as fallback
+          ...updated,       // Apply API response
+          ...updateData,    // Ensure our form data is preserved
+          _id: selectedTour._id,  // Preserve ID
+          // Preserve populated fields that might not be returned by API
+          cateID: updated.cateID && typeof updated.cateID === 'object' ? updated.cateID : selectedTour.cateID,
+          supplier_id: updated.supplier_id && typeof updated.supplier_id === 'object' ? updated.supplier_id : selectedTour.supplier_id
+        };
+        
+        console.log('Final updated tour object:', updatedTour);
+        console.log('Final cateID:', updatedTour.cateID);
+        
+        // Update both tours list and selectedTour
+        setTours(tours.map(t => t._id === selectedTour._id ? updatedTour : t));
+        setSelectedTour(updatedTour);  // Update selectedTour for immediate view update
+        
+        // Reload tours list to ensure data consistency (optional but recommended)
+        try {
+          const refreshedTours = await getToursByRole();
+          if (refreshedTours && Array.isArray(refreshedTours)) {
+            setTours(refreshedTours);
+            // Find and update selectedTour from refreshed data
+            const refreshedSelectedTour = refreshedTours.find(t => t._id === selectedTour._id);
+            if (refreshedSelectedTour) {
+              setSelectedTour(refreshedSelectedTour);
+            }
+          }
+        } catch (refreshError) {
+          console.warn('Warning: Could not refresh tours list:', refreshError);
+          // Continue with local update if refresh fails
+        }
+        
         alert('Cập nhật tour thành công!');
+        
+        // Switch back to view mode to see updated data
+        setModalType('view');
+        setForm({});  // Clear form data
         setShowModal(false);
       } catch (err) {
         console.error('Error updating tour:', err);
@@ -415,6 +533,17 @@ function Tour() {
     const number = value.toString().replace(/\D/g, '');
     return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   }
+
+  // Debug tours trước khi render
+  console.log('=== RENDER DEBUG ===');
+  console.log('tours length:', tours.length);
+  console.log('pagedTours length:', pagedTours.length);
+  console.log('loading:', loading);
+  console.log('error:', error);
+  console.log('currentPage:', currentPage);
+  console.log('tours data:', tours);
+  console.log('pagedTours data:', pagedTours);
+  console.log('===================');
 
   return (
     <div className={`content-wrapper bg-white text-dark`} style={{ position: 'relative' }}>
@@ -473,32 +602,159 @@ function Tour() {
             
             <div className="col-md-12">
               <div className="row">
-                <div className="col-12 mb-3 d-flex flex-wrap align-items-center gap-2">
-                  <select value={selectedCategory} onChange={e => { setSelectedCategory(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2">
-                    <option value="">Tất cả danh mục</option>
-                    {categories.map(cate => (
-                      <option key={cate._id} value={cate._id}>{cate.name}</option>
-                    ))}
-                  </select>
-                  <select value={selectedProvince} onChange={e => { setSelectedProvince(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2">
-                    <option value="">Tất cả địa điểm</option>
-                    {provinceList.map(province => (
-                      <option key={province} value={province}>{province}</option>
-                    ))}
-                  </select>
-                  {(selectedProvince || selectedCategory) && (
-                    <button className="btn btn-outline-secondary btn-sm ml-2" onClick={() => { setSelectedProvince(''); setSelectedCategory(''); setCurrentPage(1); }}>Hiển thị tất cả tour</button>
+                <div className="col-12 mb-3">
+                  {/* Row 1: Category and Province filters */}
+                  <div className="d-flex flex-wrap align-items-center mb-2">
+                    <select value={selectedCategory} onChange={e => { setSelectedCategory(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2 mb-2">
+                      <option value="">Tất cả danh mục</option>
+                      {categories.map(cate => (
+                        <option key={cate._id} value={cate._id}>{cate.name}</option>
+                      ))}
+                    </select>
+                    <select value={selectedProvince} onChange={e => { setSelectedProvince(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2 mb-2">
+                      <option value="">Tất cả địa điểm</option>
+                      {provinceList.map(province => (
+                        <option key={province} value={province}>{province}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* Row 2: Price filters */}
+                  <div className="d-flex flex-wrap align-items-center mb-2">
+                    <div className="d-flex align-items-center mr-3 mb-2">
+                      <span className="text-muted mr-2">Giá từ:</span>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Tối thiểu"
+                        style={{ width: '100px' }}
+                        value={priceFilter.minPrice}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          const formatted = value ? value.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '';
+                          setPriceFilter(prev => ({ ...prev, minPrice: formatted }));
+                          setCurrentPage(1);
+                        }}
+                      />
+                      <span className="mx-2">-</span>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Tối đa"
+                        style={{ width: '100px' }}
+                        value={priceFilter.maxPrice}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          const formatted = value ? value.replace(/\B(?=(\d{3})+(?!\d))/g, ".") : '';
+                          setPriceFilter(prev => ({ ...prev, maxPrice: formatted }));
+                          setCurrentPage(1);
+                        }}
+                      />
+                      <span className="text-muted ml-2">VNĐ</span>
+                    </div>
+                    
+                    {/* Quick price filter buttons */}
+                    <div className="d-flex flex-wrap align-items-center mr-2 mb-2">
+                      <span className="text-muted mr-2">Nhanh:</span>
+                      <button 
+                        className="btn btn-outline-info btn-sm mr-1 mb-1"
+                        onClick={() => {
+                          setPriceFilter({ minPrice: '', maxPrice: '500.000' });
+                          setCurrentPage(1);
+                        }}
+                      >
+                        &lt; 500K
+                      </button>
+                      <button 
+                        className="btn btn-outline-info btn-sm mr-1 mb-1"
+                        onClick={() => {
+                          setPriceFilter({ minPrice: '500.000', maxPrice: '1.000.000' });
+                          setCurrentPage(1);
+                        }}
+                      >
+                        500K - 1M
+                      </button>
+                      <button 
+                        className="btn btn-outline-info btn-sm mr-1 mb-1"
+                        onClick={() => {
+                          setPriceFilter({ minPrice: '1.000.000', maxPrice: '3.000.000' });
+                          setCurrentPage(1);
+                        }}
+                      >
+                        1M - 3M
+                      </button>
+                      <button 
+                        className="btn btn-outline-info btn-sm mb-1"
+                        onClick={() => {
+                          setPriceFilter({ minPrice: '3.000.000', maxPrice: '' });
+                          setCurrentPage(1);
+                        }}
+                      >
+                        &gt; 3M
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Row 3: Clear filters button */}
+                  {(selectedProvince || selectedCategory || priceFilter.minPrice || priceFilter.maxPrice) && (
+                    <div className="d-flex align-items-center">
+                      <button className="btn btn-outline-secondary btn-sm" onClick={() => { 
+                        setSelectedProvince(''); 
+                        setSelectedCategory(''); 
+                        setPriceFilter({ minPrice: '', maxPrice: '' });
+                        setCurrentPage(1); 
+                      }}>
+                        <i className="fas fa-times mr-1"></i>
+                        Xóa tất cả bộ lọc
+                      </button>
+                      <span className="text-muted ml-3">
+                        <i className="fas fa-filter mr-1"></i>
+                        Đang lọc: {[
+                          selectedCategory && `Danh mục`,
+                          selectedProvince && `Địa điểm`, 
+                          (priceFilter.minPrice || priceFilter.maxPrice) && `Giá`
+                        ].filter(Boolean).join(', ')}
+                      </span>
+                    </div>
                   )}
                 </div>
                 {/* Bảng tour */}
                 <div className="col-md-12">
                   {userRole === 'supplier' && (
-                    <button className="btn btn-primary mb-3" onClick={handleAdd}>Thêm Tour mới</button>
+                    <div className="mb-3">
+                      <button className="btn btn-primary mr-2" onClick={handleAdd}>Thêm Tour mới</button>
+                      <button className="btn btn-success btn-sm mr-2" onClick={() => {
+                        setSelectedCategory('');
+                        setSelectedProvince('');
+                        setPriceFilter({ minPrice: '', maxPrice: '' });
+                        setCurrentPage(1);
+                        window.location.reload(); // Force refresh
+                      }}>Reset & Refresh</button>
+                    </div>
+                  )}
+                  {!userRole === 'supplier' && (
+                    <div className="mb-3">
+                      <button className="btn btn-success btn-sm mr-2" onClick={() => {
+                        setSelectedCategory('');
+                        setSelectedProvince('');
+                        setPriceFilter({ minPrice: '', maxPrice: '' });
+                        setCurrentPage(1);
+                        window.location.reload(); // Force refresh
+                      }}>Reset & Refresh</button>
+                    </div>
                   )}
                   {loading && <div>Đang tải dữ liệu...</div>}
                   {error && <div className="alert alert-danger">{error}</div>}
                   {!loading && !error && (
                     <>
+                      <div className="mb-2">
+                        <small className="text-muted">
+                          <i className="fas fa-info-circle mr-1"></i>
+                          Debug Info: Tổng {tours.length} tours, hiển thị {pagedTours.length} tours trang {currentPage}
+                          {selectedCategory && `, đã lọc theo danh mục: ${categories.find(c => c._id === selectedCategory)?.name}`}
+                          {selectedProvince && `, đã lọc theo địa điểm: ${selectedProvince}`}
+                        </small>
+                      </div>
                       <div className={`card`}>
                         <div className="card-body">
                           <table className={`table table-bordered`}>
@@ -506,21 +762,30 @@ function Tour() {
                               <tr>
                                 <th>Tên Tour</th>
                                 <th>Địa điểm</th>
-                                <th>Giá (Người lớn / Trẻ em)</th>
+                                <th>Giá </th>
                                 <th>Thời gian hoạt động</th>
                                 <th>Danh mục</th>
-                                {isAdmin() && <th>Trạng thái</th>}
+                                <th>Trạng thái</th>
                                 {isAdmin() && <th>Nhà cung cấp</th>}
                                 <th>Hành động</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {pagedTours
-                                .filter(tour =>
-                                  (!selectedProvince || tour.province === selectedProvince) &&
-                                  (!selectedCategory || (tour.cateID && (tour.cateID._id === selectedCategory || tour.cateID.name === categories.find(c => c._id === selectedCategory)?.name)))
-                                )
-                                .map((tour, index) => (
+                              {console.log('=== RENDERING TBODY ===') || 
+                               console.log('pagedTours for render:', pagedTours) || 
+                               console.log('selectedProvince:', selectedProvince) || 
+                               console.log('selectedCategory:', selectedCategory) || 
+                               ''}
+                              {pagedTours.length === 0 && (
+                                <tr>
+                                  <td colSpan="8" className="text-center text-muted">
+                                    Không có tour nào để hiển thị
+                                  </td>
+                                </tr>
+                              )}
+                              {pagedTours.map((tour, index) => {
+                                console.log(`Rendering tour ${index}:`, tour.name);
+                                return (
                                   <tr key={`tour-${tour._id}-${index}`}>
                                     <td>{tour.name}</td>
                                     <td>{tour.location}</td>
@@ -536,23 +801,21 @@ function Tour() {
                                       }
                                     </td>
                                     <td>
-                                      {(tour.open_time || tour.opening_time || 'N/A') + ' - ' + (tour.close_time || tour.closing_time || 'N/A')}
+                                      {(tour.opening_time || tour.open_time || 'N/A') + ' - ' + (tour.closing_time || tour.close_time || 'N/A')}
                                     </td>
                                     <td>{tour.cateID?.name}</td>
-                                    {isAdmin() && (
-                                      <td>
-                                        <span className={`badge badge-${
-                                          tour.status === 'requested' ? 'warning' : 
-                                          tour.status === 'active' ? 'success' : 
-                                          tour.status === 'deactive' ? 'danger' : 
-                                          'secondary'
-                                        }`}>
-                                          {tour.status === 'requested' ? 'Chờ duyệt' : 
-                                           tour.status === 'active' ? 'Active' :
-                                           tour.status === 'deactive' ? 'Deactive' : tour.status}
-                                        </span>
-                                      </td>
-                                    )}
+                                    <td>
+                                      <span className={`badge badge-${
+                                        tour.status === 'requested' ? 'warning' : 
+                                        tour.status === 'active' ? 'success' : 
+                                        tour.status === 'deactive' ? 'danger' : 
+                                        'secondary'
+                                      }`}>
+                                        {tour.status === 'requested' ? 'Chờ duyệt' : 
+                                         tour.status === 'active' ? 'Active' :
+                                         tour.status === 'deactive' ? 'Deactive' : tour.status}
+                                      </span>
+                                    </td>
                                     {isAdmin() && (
                                       <td>{tour.supplier_id?.name || 'N/A'}</td>
                                     )}
@@ -600,7 +863,8 @@ function Tour() {
                                       )}
                                     </td>
                                   </tr>
-                                ))}
+                                );
+                              })}
                             </tbody>
                           </table>
                           <div className="d-flex justify-content-between align-items-center mt-2">
@@ -662,8 +926,15 @@ function Tour() {
               <div className="modal-header bg-light">
                 <h5 className="modal-title">
                   {modalType === 'view' && 'Chi tiết Tour'}
-                  {modalType === 'edit' && 'Sửa Tour'}
+                  {modalType === 'edit' && userRole === 'supplier' && 'Sửa Tour của bạn'}
+                  {modalType === 'edit' && userRole === 'admin' && 'Sửa Tour'}
                   {modalType === 'add' && 'Thêm Tour mới'}
+                  {modalType === 'edit' && userRole === 'supplier' && (
+                    <small className="text-muted ml-2">
+                      <i className="fas fa-info-circle mr-1"></i>
+                      Bạn chỉ có thể sửa thông tin cơ bản
+                    </small>
+                  )}
                 </h5>
                 <button type="button" className="close" onClick={() => setShowModal(false)}>
                   <span>&times;</span>
@@ -688,6 +959,12 @@ function Tour() {
                         <b>Giá:</b> <span className="ml-1">{Number(selectedTour.price).toLocaleString('vi-VN')}VNĐ</span>
                       </div>
                       <div className="col-md-6 mb-2">
+                        <b>Giá trẻ em:</b> <span className="ml-1">{Number(selectedTour.price_child).toLocaleString('vi-VN')}VNĐ</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
+                        <b>Số vé tối đa/ngày:</b> <span className="ml-1">{selectedTour.max_tickets_per_day || 'N/A'} vé</span>
+                      </div>
+                      <div className="col-md-6 mb-2">
                         <b>Thời lượng:</b> <span className="ml-1">{selectedTour.duration}</span>
                       </div>
                       <div className="col-md-6 mb-2">
@@ -705,29 +982,22 @@ function Tour() {
                       <div className="col-md-6 mb-2">
                         <b>Giờ đóng cửa:</b> <span className="ml-1">{selectedTour.closing_time || selectedTour.close_time || 'N/A'}</span>
                       </div>
-                      {isAdmin() && (
-                        <div className="col-md-6 mb-2">
-                          <b>Trạng thái:</b> 
-                          <span className={`ml-1 badge badge-${
-                            selectedTour.status === 'requested' ? 'warning' : 
-                            selectedTour.status === 'active' ? 'success' : 
-                            selectedTour.status === 'deactive' ? 'danger' : 
-                            'secondary'
-                          }`}>
-                            {selectedTour.status === 'requested' ? 'Chờ duyệt' : 
-                             selectedTour.status === 'active' ? 'Active' :
-                             selectedTour.status === 'deactive' ? 'Deactive' : selectedTour.status}
-                          </span>
-                        </div>
-                      )}
+                      <div className="col-md-6 mb-2">
+                        <b>Trạng thái:</b> 
+                        <span className={`ml-1 badge badge-${
+                          selectedTour.status === 'requested' ? 'warning' : 
+                          selectedTour.status === 'active' ? 'success' : 
+                          selectedTour.status === 'deactive' ? 'danger' : 
+                          'secondary'
+                        }`}>
+                          {selectedTour.status === 'requested' ? 'Chờ duyệt' : 
+                           selectedTour.status === 'active' ? 'Active' :
+                           selectedTour.status === 'deactive' ? 'Deactive' : selectedTour.status}
+                        </span>
+                      </div>
                       {isAdmin() && (
                         <div className="col-md-6 mb-2">
                           <b>Nhà cung cấp:</b> <span className="ml-1">{selectedTour.supplier_id?.name || 'N/A'}</span>
-                        </div>
-                      )}
-                      {userRole === 'supplier' && (
-                        <div className="col-md-6 mb-2">
-                          <b>Trạng thái:</b> <span className="ml-1">{selectedTour.status === 'active' ? 'Active' : 'Deactive'}</span>
                         </div>
                       )}
                     </div>
@@ -736,6 +1006,66 @@ function Tour() {
                       <div style={{ maxHeight: 250, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#fafbfc', marginTop: 6 }}>
                         <span dangerouslySetInnerHTML={{ __html: selectedTour.description }} />
                       </div>
+                    </div>
+                    
+                    {/* Services Section - View Mode */}
+                    <div className="mt-3">
+                      <b><i className="fas fa-concierge-bell mr-2 text-info"></i>Dịch vụ đi kèm:</b>
+                      {selectedTour.services && selectedTour.services.length > 0 ? (
+                        <div className="row mt-2">
+                          {selectedTour.services.map((service, serviceIndex) => (
+                            <div key={serviceIndex} className="col-md-6 mb-3">
+                              <div className="card h-100 shadow-sm">
+                                <div className="card-body p-3">
+                                  <div className="d-flex align-items-center mb-2">
+                                    <h6 className="card-title mb-0 text-primary">
+                                      <i className="fas fa-cog mr-1"></i>
+                                      {service.name}
+                                    </h6>
+                                    <span className={`ml-auto badge ${service.type === 'single' ? 'badge-info' : 'badge-success'}`}>
+                                      {service.type === 'single' ? 'Chọn một' : 'Chọn nhiều'}
+                                    </span>
+                                  </div>
+                                  
+                                  {service.options && service.options.length > 0 ? (
+                                    <div className="mt-2">
+                                      <small className="text-muted font-weight-bold d-block mb-1">Tùy chọn:</small>
+                                      {service.options.map((option, optionIndex) => (
+                                        <div key={optionIndex} className="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                          <div>
+                                            <span className="font-weight-medium">{option.title}</span>
+                                            {option.description && (
+                                              <div>
+                                                <small className="text-muted">{option.description}</small>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {option.price_extra > 0 && (
+                                            <span className="badge badge-warning">
+                                              +{option.price_extra.toLocaleString()} VNĐ
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-muted text-center py-2">
+                                      <small><i className="fas fa-info-circle mr-1"></i>Chưa có tùy chọn nào</small>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="alert alert-light mt-2 mb-0">
+                          <div className="d-flex align-items-center">
+                            <i className="fas fa-info-circle mr-2 text-muted"></i>
+                            <span className="text-muted">Chưa có dịch vụ đi kèm nào cho tour này.</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -785,20 +1115,31 @@ function Tour() {
                           </div>
                         </div>
                         <div className="form-group">
+                          <label><i className="fas fa-ticket-alt mr-1" />Số lượng vé tối đa trong ngày</label>
+                          <div className="input-group">
+                            <input 
+                              type="number" 
+                              className="form-control bg-light" 
+                              name="max_tickets_per_day" 
+                              value={form.max_tickets_per_day || ''} 
+                              onChange={handleFormChange} 
+                              required 
+                              min="1"
+                              step="1"
+                              placeholder="Nhập số lượng vé tối đa"
+                            />
+                            <div className="input-group-append">
+                              <span className="input-group-text">vé</span>
+                            </div>
+                          </div>
+                          <small className="text-muted">Số lượng vé tối đa có thể bán trong một ngày</small>
+                        </div>
+                        <div className="form-group">
                           <label><FaList className="mr-1" />Danh mục</label>
                           <select className="form-control bg-light" name="cateID.name" value={form.cateID.name} onChange={handleFormChange} required>
                             <option value="">-- Chọn danh mục --</option>
                             {categories.map(cate => (
                               <option key={cate._id} value={cate.name}>{cate.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="form-group">
-                          <label><FaList className="mr-1" />Nhà cung cấp</label>
-                          <select className="form-control bg-light" name="supplier_id" value={form.supplier_id?._id || ''} onChange={handleFormChange} required>
-                            <option value="">-- Chọn nhà cung cấp --</option>
-                            {suppliers.map((sup, idx) => (
-                              <option key={`supplier-${sup._id || 'unknown'}-${idx}`} value={sup._id}>{sup.name}</option>
                             ))}
                           </select>
                         </div>
@@ -821,29 +1162,65 @@ function Tour() {
                             ))}
                           </div>
                         </div>
-                        {/* Services Section */}
+                        {/* Services Section - Improved */}
                         <div className="form-group">
-                          <label><i className="fas fa-concierge-bell mr-1" />Dịch vụ</label>
-                          <div className="border rounded p-3" style={{ backgroundColor: '#f8f9fa' }}>
+                          <div className="d-flex align-items-center justify-content-between mb-3">
+                            <label className="mb-0"><i className="fas fa-concierge-bell mr-2" />Dịch vụ đi kèm</label>
+                            <button
+                              type="button"
+                              className="btn btn-outline-success btn-sm"
+                              onClick={() => {
+                                const newService = {
+                                  name: '',
+                                  type: 'single',
+                                  options: [{ title: '', price_extra: 0, description: '' }]
+                                };
+                                setForm({ ...form, services: [...(form.services || []), newService] });
+                              }}
+                            >
+                              <i className="fas fa-plus mr-1"></i>Thêm dịch vụ
+                            </button>
+                          </div>
+                          
+                          {(!form.services || form.services.length === 0) && (
+                            <div className="alert alert-info">
+                              <div className="d-flex align-items-center">
+                                <i className="fas fa-info-circle mr-2"></i>
+                                <div>
+                                  <strong>Chưa có dịch vụ nào.</strong> Click "Thêm dịch vụ" để thêm các dịch vụ đi kèm cho tour của bạn.
+                                  <br />
+                                  <small className="text-muted">
+                                    Ví dụ: Hướng dẫn viên, Bữa ăn, Phòng khách sạn, v.v.
+                                  </small>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="border rounded p-3" style={{ backgroundColor: '#f8f9fa', maxHeight: '400px', overflowY: 'auto' }}>
                             {form.services && form.services.map((service, serviceIndex) => (
-                              <div key={serviceIndex} className="mb-3 p-3 border rounded bg-white">
-                                <div className="d-flex justify-content-between align-items-center mb-2">
-                                  <h6 className="mb-0">Dịch vụ {serviceIndex + 1}</h6>
+                              <div key={serviceIndex} className="mb-3 p-3 border rounded bg-white shadow-sm">
+                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                  <h6 className="mb-0 text-primary">
+                                    <i className="fas fa-cog mr-1"></i>
+                                    Dịch vụ {serviceIndex + 1}
+                                  </h6>
                                   <button
                                     type="button"
-                                    className="btn btn-sm btn-danger"
+                                    className="btn btn-sm btn-outline-danger"
                                     onClick={() => {
                                       const newServices = form.services.filter((_, idx) => idx !== serviceIndex);
                                       setForm({ ...form, services: newServices });
                                     }}
+                                    title="Xóa dịch vụ này"
                                   >
                                     <i className="fas fa-trash"></i>
                                   </button>
                                 </div>
                                 
-                                <div className="form-row mb-2">
+                                <div className="form-row mb-3">
                                   <div className="col-md-8">
-                                    <label>Tên dịch vụ</label>
+                                    <label className="font-weight-bold">Tên dịch vụ</label>
                                     <input
                                       type="text"
                                       className="form-control"
@@ -853,11 +1230,11 @@ function Tour() {
                                         newServices[serviceIndex].name = e.target.value;
                                         setForm({ ...form, services: newServices });
                                       }}
-                                      placeholder="Ví dụ: Loại hướng dẫn viên"
+                                      placeholder="Ví dụ: Hướng dẫn viên du lịch"
                                     />
                                   </div>
                                   <div className="col-md-4">
-                                    <label>Loại</label>
+                                    <label className="font-weight-bold">Loại lựa chọn</label>
                                     <select
                                       className="form-control"
                                       value={service.type || 'single'}
@@ -867,88 +1244,109 @@ function Tour() {
                                         setForm({ ...form, services: newServices });
                                       }}
                                     >
-                                      <option value="single">Chọn một</option>
-                                      <option value="multiple">Chọn nhiều</option>
+                                      <option value="single">Chọn một (Single)</option>
+                                      <option value="multiple">Chọn nhiều (Multiple)</option>
                                     </select>
+                                    <small className="text-muted">
+                                      {service.type === 'single' ? 'Khách hàng chỉ chọn 1 tùy chọn' : 'Khách hàng có thể chọn nhiều tùy chọn'}
+                                    </small>
                                   </div>
                                 </div>
 
-                                <label>Tùy chọn</label>
+                                <div className="mb-2">
+                                  <div className="d-flex align-items-center justify-content-between">
+                                    <label className="font-weight-bold mb-0">Tùy chọn dịch vụ</label>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-outline-primary"
+                                      onClick={() => {
+                                        const newServices = [...form.services];
+                                        if (!newServices[serviceIndex].options) {
+                                          newServices[serviceIndex].options = [];
+                                        }
+                                        newServices[serviceIndex].options.push({ title: '', price_extra: 0, description: '' });
+                                        setForm({ ...form, services: newServices });
+                                      }}
+                                    >
+                                      <i className="fas fa-plus mr-1"></i>Thêm tùy chọn
+                                    </button>
+                                  </div>
+                                </div>
+
                                 {service.options && service.options.map((option, optionIndex) => (
-                                  <div key={optionIndex} className="form-row mb-2 align-items-end">
-                                    <div className="col-md-6">
-                                      <input
-                                        type="text"
-                                        className="form-control"
-                                        placeholder="Tên tùy chọn"
-                                        value={option.title || ''}
-                                        onChange={(e) => {
-                                          const newServices = [...form.services];
-                                          newServices[serviceIndex].options[optionIndex].title = e.target.value;
-                                          setForm({ ...form, services: newServices });
-                                        }}
-                                      />
-                                    </div>
-                                    <div className="col-md-4">
-                                      <input
-                                        type="number"
-                                        className="form-control"
-                                        placeholder="Giá thêm"
-                                        value={option.price_extra || 0}
-                                        onChange={(e) => {
-                                          const newServices = [...form.services];
-                                          newServices[serviceIndex].options[optionIndex].price_extra = parseInt(e.target.value) || 0;
-                                          setForm({ ...form, services: newServices });
-                                        }}
-                                      />
-                                    </div>
-                                    <div className="col-md-2">
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-danger"
-                                        onClick={() => {
-                                          const newServices = [...form.services];
-                                          newServices[serviceIndex].options = newServices[serviceIndex].options.filter((_, idx) => idx !== optionIndex);
-                                          setForm({ ...form, services: newServices });
-                                        }}
-                                      >
-                                        <i className="fas fa-times"></i>
-                                      </button>
+                                  <div key={optionIndex} className="mb-2 p-2 border rounded" style={{ backgroundColor: '#fdfdfd' }}>
+                                    <div className="form-row align-items-center">
+                                      <div className="col-md-4">
+                                        <label className="small font-weight-bold">Tên tùy chọn</label>
+                                        <input
+                                          type="text"
+                                          className="form-control form-control-sm"
+                                          placeholder="Ví dụ: Hướng dẫn viên tiếng Anh"
+                                          value={option.title || ''}
+                                          onChange={(e) => {
+                                            const newServices = [...form.services];
+                                            newServices[serviceIndex].options[optionIndex].title = e.target.value;
+                                            setForm({ ...form, services: newServices });
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="col-md-3">
+                                        <label className="small font-weight-bold">Giá phụ thu (VNĐ)</label>
+                                        <input
+                                          type="number"
+                                          className="form-control form-control-sm"
+                                          placeholder="0"
+                                          min="0"
+                                          value={option.price_extra || 0}
+                                          onChange={(e) => {
+                                            const newServices = [...form.services];
+                                            newServices[serviceIndex].options[optionIndex].price_extra = parseInt(e.target.value) || 0;
+                                            setForm({ ...form, services: newServices });
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="col-md-4">
+                                        <label className="small font-weight-bold">Mô tả ngắn</label>
+                                        <input
+                                          type="text"
+                                          className="form-control form-control-sm"
+                                          placeholder="Mô tả chi tiết..."
+                                          value={option.description || ''}
+                                          onChange={(e) => {
+                                            const newServices = [...form.services];
+                                            newServices[serviceIndex].options[optionIndex].description = e.target.value;
+                                            setForm({ ...form, services: newServices });
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="col-md-1 text-center">
+                                        <label className="small d-block">&nbsp;</label>
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-outline-danger"
+                                          onClick={() => {
+                                            const newServices = [...form.services];
+                                            newServices[serviceIndex].options = newServices[serviceIndex].options.filter((_, idx) => idx !== optionIndex);
+                                            setForm({ ...form, services: newServices });
+                                          }}
+                                          title="Xóa tùy chọn này"
+                                          disabled={service.options.length === 1}
+                                        >
+                                          <i className="fas fa-times"></i>
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
                                 ))}
                                 
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-primary"
-                                  onClick={() => {
-                                    const newServices = [...form.services];
-                                    if (!newServices[serviceIndex].options) {
-                                      newServices[serviceIndex].options = [];
-                                    }
-                                    newServices[serviceIndex].options.push({ title: '', price_extra: 0 });
-                                    setForm({ ...form, services: newServices });
-                                  }}
-                                >
-                                  <i className="fas fa-plus mr-1"></i>Thêm tùy chọn
-                                </button>
+                                {(!service.options || service.options.length === 0) && (
+                                  <div className="text-center text-muted py-2">
+                                    <i className="fas fa-info-circle mr-1"></i>
+                                    Chưa có tùy chọn nào. Click "Thêm tùy chọn" để thêm.
+                                  </div>
+                                )}
                               </div>
                             ))}
-                            
-                            <button
-                              type="button"
-                              className="btn btn-outline-success btn-sm"
-                              onClick={() => {
-                                const newService = {
-                                  name: '',
-                                  type: 'single',
-                                  options: [{ title: '', price_extra: 0 }]
-                                };
-                                setForm({ ...form, services: [...(form.services || []), newService] });
-                              }}
-                            >
-                              <i className="fas fa-plus mr-1"></i>Thêm dịch vụ
-                            </button>
                           </div>
                         </div>
                       </>
@@ -976,11 +1374,35 @@ function Tour() {
                       )}
                     </div>
                     {!editingDescription && (
-                      <button type="submit" className="btn btn-success"><i className="fas fa-save mr-1"></i>Lưu</button>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <button type="submit" className="btn btn-success">
+                          <i className="fas fa-save mr-1"></i>Lưu thay đổi
+                        </button>
+                        {userRole === 'supplier' && (
+                          <small className="text-muted">
+                            <i className="fas fa-info-circle mr-1"></i>
+                            Thay đổi sẽ được cập nhật ngay lập tức
+                          </small>
+                        )}
+                      </div>
                     )}
                   </form>
                 )}
               </div>
+              {/* Footer cho modal edit */}
+              {modalType === 'edit' && (
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                    <i className="fas fa-times mr-1"></i>Hủy
+                  </button>
+                  {userRole === 'supplier' && (
+                    <small className="text-muted mr-auto">
+                      <i className="fas fa-info-circle mr-1"></i>
+                      Bạn đang chỉnh sửa tour của mình
+                    </small>
+                  )}
+                </div>
+              )}
               {modalType === 'view' && selectedTour && (
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
@@ -1011,26 +1433,50 @@ function Tour() {
                     </>
                   )}
                   {isAdmin() && (selectedTour.status === 'active' || selectedTour.status === 'deactive') && (
-                    <button 
-                      type="button" 
-                      className={`btn ${selectedTour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
-                      onClick={() => {
-                        handleToggleStatus(selectedTour._id, selectedTour.status);
-                        setShowModal(false);
-                      }}
-                    >
-                      <i className={`fas ${selectedTour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
-                      {selectedTour.status === 'active' ? 'Deactive Tour' : 'Active Tour'}
-                    </button>
+                    <>
+                      <button 
+                        type="button" 
+                        className={`btn ${selectedTour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
+                        onClick={() => {
+                          handleToggleStatus(selectedTour._id, selectedTour.status);
+                          setShowModal(false);
+                        }}
+                      >
+                        <i className={`fas ${selectedTour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
+                        {selectedTour.status === 'active' ? 'Deactive Tour' : 'Active Tour'}
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn btn-danger" 
+                        onClick={() => {
+                          handleDelete(selectedTour._id);
+                          setShowModal(false);
+                        }}
+                      >
+                        <i className="fas fa-trash mr-1"></i>Xóa Tour
+                      </button>
+                    </>
                   )}
                   {userRole === 'supplier' && (
-                    <button 
-                      type="button" 
-                      className="btn btn-warning" 
-                      onClick={() => handleEdit(selectedTour)}
-                    >
-                      <i className="fas fa-edit mr-1"></i>Sửa Tour
-                    </button>
+                    <>
+                      <button 
+                        type="button" 
+                        className="btn btn-warning mr-2" 
+                        onClick={() => handleEdit(selectedTour)}
+                      >
+                        <i className="fas fa-edit mr-1"></i>Sửa Tour
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn btn-danger" 
+                        onClick={() => {
+                          handleDelete(selectedTour._id);
+                          setShowModal(false);
+                        }}
+                      >
+                        <i className="fas fa-trash mr-1"></i>Xóa Tour
+                      </button>
+                    </>
                   )}
                 </div>
               )}

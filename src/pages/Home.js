@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getTours, getAllBookings, getAllUsers, getReviews, getSuppliers } from '../api/api';
-import Calendar from '../components/Calendar';
+import Calendar from './SimpleCalendar';
 import LastestReview from '../components/LastestReview';
 import { Line } from 'react-chartjs-2';
 import { Chart, BarElement, CategoryScale, LinearScale, Tooltip, Legend, PointElement, LineElement } from 'chart.js';
@@ -438,9 +438,17 @@ function Home() {
               <div className="col-12">
                 <div className="card">
                   <div className="card-header">
-                    <h3 className="card-title">Lịch Booking</h3>
+                    <h3 className="card-title">
+                      <i className="fas fa-calendar-alt mr-2"></i>
+                      Lịch Booking Tours
+                    </h3>
+                    <div className="card-tools">
+                      <small className="text-muted">
+                        Click vào tour để xem chi tiết booking
+                      </small>
+                    </div>
                   </div>
-                  <div className="card-body">
+                  <div className="card-body p-0">
                     <Calendar />
                   </div>
                 </div>

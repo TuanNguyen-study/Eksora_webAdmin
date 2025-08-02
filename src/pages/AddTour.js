@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getCategories, getSuppliers, createTour, getCurrentUserRole, getUser } from '../api/api';
 import CkeditorField from '../components/CkeditorField';
 
@@ -22,11 +23,13 @@ const loadGoogleMapsScript = (apiKey, callback) => {
 };
 
 function AddTour() {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     name: '',
     description: '',
     price: '', // Giá vé
     price_child: '', // Giá trẻ em
+    max_tickets_per_day: '', // Số lượng vé tối đa trong ngày
     image: [], // Change from [''] to [] to avoid empty string
     location: '',
     lat: '',
@@ -35,8 +38,8 @@ function AddTour() {
     cateID: { name: '', image: '' },
     supplier_id: '',
     // province: '',
-    open_time: '',
-    close_time: '',
+    opening_time: '',
+    closing_time: '',
     status: '',
     services: [],
   });
@@ -137,21 +140,31 @@ function AddTour() {
     // Lấy thông tin user và role hiện tại
     async function fetchUserInfo() {
       try {
+        console.log('=== FETCHING USER INFO FOR ADDTOUR ===');
         const [role, userProfile] = await Promise.all([
           getCurrentUserRole(),
           getUser()
         ]);
+        console.log('User Role:', role);
+        console.log('User Profile:', userProfile);
+        
         setUserRole(role);
         setCurrentUser(userProfile);
         
-        // Nếu là supplier, tự động set supplier_id trong form
+        // Nếu là supplier, tự động set supplier_id và status trong form
         if (role === 'supplier' && userProfile && userProfile._id) {
+          console.log('Setting supplier form defaults:', {
+            supplier_id: userProfile._id,
+            status: 'requested'
+          });
+          
           setForm(prevForm => ({
             ...prevForm,
             supplier_id: userProfile._id,
             status: 'requested' // Tự động set trạng thái requested cho supplier
           }));
         }
+        console.log('=====================================');
       } catch (error) {
         console.error('Error fetching user info:', error);
       }
@@ -159,7 +172,14 @@ function AddTour() {
     
     fetchUserInfo();
     getCategories().then(setCategories).catch(() => setCategories([]));
-    getSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
+    getSuppliers().then((suppliers) => {
+      console.log('Suppliers loaded:', suppliers);
+      console.log('Sample supplier data:', suppliers[0]);
+      if (suppliers.length > 0) {
+        console.log('Supplier fields available:', Object.keys(suppliers[0]));
+      }
+      setSuppliers(suppliers);
+    }).catch(() => setSuppliers([]));
   }, []);
 
   // Ensure unique keys for categories
@@ -183,6 +203,10 @@ function AddTour() {
         setForm({ ...form, image: value.split(',') });
       } else if (name === 'price' || name === 'price_child') {
         setForm({ ...form, [name]: formatNumber(value) });
+      } else if (name === 'max_tickets_per_day') {
+        // Chỉ cho phép số nguyên dương cho số lượng vé
+        const numericValue = value.replace(/\D/g, '');
+        setForm({ ...form, [name]: numericValue });
       } else {
         setForm({ ...form, [name]: value });
       }
@@ -203,19 +227,32 @@ function AddTour() {
     setForm({ ...form, services: newServices });
   };
 
-  const handleServiceOptionChange = (serviceIdx, optionIdx, value) => {
+  const handleServiceOptionChange = (serviceIdx, optionIdx, field, value) => {
     const newServices = [...form.services];
-    newServices[serviceIdx].options[optionIdx] = value;
+    if (field === 'price_extra') {
+      newServices[serviceIdx].options[optionIdx][field] = Number(value) || 0;
+    } else {
+      newServices[serviceIdx].options[optionIdx][field] = value;
+    }
     setForm({ ...form, services: newServices });
   };
 
   const handleAddService = () => {
+    const newService = {
+      id: Date.now(), // Generate ID only once when creating
+      name: '',
+      type: 'single', // Default to single
+      options: [{ 
+        id: Date.now() + 1, 
+        title: '',
+        price_extra: 0,
+        description: ''
+      }]
+    };
+    
     setForm({
       ...form,
-      services: [
-        ...form.services,
-        { name: '', type: '', price: '', options: [''] },
-      ],
+      services: [...form.services, newService],
     });
   };
 
@@ -226,7 +263,13 @@ function AddTour() {
 
   const handleAddOption = (serviceIdx) => {
     const newServices = [...form.services];
-    newServices[serviceIdx].options.push('');
+    const newOption = {
+      id: Date.now() + Math.random(), // Ensure unique ID
+      title: '',
+      price_extra: 0,
+      description: ''
+    };
+    newServices[serviceIdx].options.push(newOption);
     setForm({ ...form, services: newServices });
   };
 
@@ -238,32 +281,42 @@ function AddTour() {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    
+    console.log('=== FORM SUBMIT DEBUG ===');
+    console.log('Current form state:', form);
+    console.log('User role:', userRole);
+    console.log('Current user:', currentUser);
+    console.log('=========================');
+    
     // Kiểm tra các trường bắt buộc (đã loại bỏ province)
     const requiredFields = [
       { name: 'name', value: form.name },
       { name: 'description', value: form.description },
       { name: 'price', value: form.price },
       { name: 'price_child', value: form.price_child },
+      { name: 'max_tickets_per_day', value: form.max_tickets_per_day },
       { name: 'location', value: form.location },
       { name: 'cateID.name', value: form.cateID.name },
       { name: 'image', value: form.image && form.image.length > 0 && form.image[0] },
-      { name: 'open_time', value: form.open_time },
-      { name: 'close_time', value: form.close_time },
+      { name: 'opening_time', value: form.opening_time },
+      { name: 'closing_time', value: form.closing_time },
       { name: 'status', value: form.status },
     ];
 
-    // Chỉ kiểm tra supplier_id nếu không phải role supplier (vì supplier đã được set tự động)
-    if (userRole !== 'supplier') {
-      requiredFields.push({ name: 'supplier_id', value: form.supplier_id });
-    }
+    // Luôn kiểm tra supplier_id, ngay cả với supplier (để đảm bảo có giá trị)
+    requiredFields.push({ name: 'supplier_id', value: form.supplier_id });
+    
     const missing = {};
     requiredFields.forEach(f => {
       if (!f.value || (typeof f.value === 'string' && !f.value.trim())) {
         missing[f.name] = true;
+        console.log('Missing field:', f.name, 'Value:', f.value);
       }
     });
+    
     setMissingFields(missing);
     if (Object.keys(missing).length > 0) {
+      console.log('Missing fields detected:', missing);
       // Focus first missing field
       const first = requiredFields.find(f => missing[f.name]);
       if (first && document.getElementsByName(first.name)[0]) {
@@ -271,22 +324,57 @@ function AddTour() {
       }
       return;
     }
-    // Validate services (optional: có thể bắt buộc nếu muốn)
+    
+    // Validate services với structure mới
+    console.log('=== VALIDATING SERVICES ===');
     for (const [i, s] of form.services.entries()) {
+      console.log(`Validating service ${i + 1}:`, s);
+      
       if (!s.name.trim()) {
-        alert(`Vui lòng nhập tên cho service thứ ${i + 1}`);
+        alert(`Vui lòng nhập tên cho dịch vụ thứ ${i + 1}`);
         return;
       }
       if (!s.type.trim()) {
-        alert(`Vui lòng nhập loại cho service thứ ${i + 1}`);
+        alert(`Vui lòng chọn loại cho dịch vụ thứ ${i + 1}`);
         return;
       }
-      if (!s.options.length || s.options.some(opt => !opt.trim())) {
-        alert(`Vui lòng nhập đầy đủ option cho service thứ ${i + 1}`);
+      if (!s.options.length) {
+        alert(`Vui lòng thêm ít nhất một tùy chọn cho dịch vụ thứ ${i + 1}`);
         return;
+      }
+      
+      // Validate options structure
+      for (const [j, opt] of s.options.entries()) {
+        if (!opt.title || !opt.title.trim()) {
+          alert(`Vui lòng nhập tên cho tùy chọn ${j + 1} của dịch vụ ${i + 1}`);
+          return;
+        }
+        if (opt.price_extra && isNaN(Number(opt.price_extra))) {
+          alert(`Giá thêm cho tùy chọn ${j + 1} của dịch vụ ${i + 1} phải là số`);
+          return;
+        }
       }
     }
+    console.log('Services validation completed successfully');
+    console.log('===========================');
+    
     try {
+      // Kiểm tra xem có phải supplier và có supplier_id hợp lệ không
+      if (userRole === 'supplier') {
+        if (!currentUser || !currentUser._id) {
+          alert('Lỗi: Không thể xác định thông tin supplier. Vui lòng đăng nhập lại.');
+          return;
+        }
+        // Đảm bảo supplier_id trong form khớp với user hiện tại
+        if (form.supplier_id !== currentUser._id) {
+          console.log('Correcting supplier_id mismatch:', {
+            formSupplierId: form.supplier_id,
+            currentUserId: currentUser._id
+          });
+          setForm(prev => ({ ...prev, supplier_id: currentUser._id }));
+        }
+      }
+      
       // Lấy đúng cateID và supplier_id là ID (string)
       let cateID = form.cateID;
       if (typeof cateID === 'object' && cateID.name) {
@@ -297,6 +385,18 @@ function AddTour() {
       if (typeof supplier_id === 'object' && supplier_id._id) {
         supplier_id = supplier_id._id;
       }
+      
+      // Đối với supplier, sử dụng ID của user hiện tại
+      if (userRole === 'supplier' && currentUser) {
+        supplier_id = currentUser._id;
+      }
+      
+      console.log('Final IDs:', {
+        cateID,
+        supplier_id,
+        userRole,
+        currentUserRole: userRole
+      });
       
       // Log current form state for debugging
       console.log('Current form state:', form);
@@ -327,6 +427,7 @@ function AddTour() {
       // Chuyển các trường số về dạng number (bỏ dấu chấm)
       const price = Number(form.price.replace(/\./g, ''));
       const price_child = Number(form.price_child.replace(/\./g, ''));
+      const max_tickets_per_day = Number(form.max_tickets_per_day);
       
       // Validate prices
       if (isNaN(price) || price <= 0) {
@@ -337,12 +438,21 @@ function AddTour() {
         alert('Giá trẻ em không hợp lệ!');
         return;
       }
+      if (isNaN(max_tickets_per_day) || max_tickets_per_day <= 0) {
+        alert('Số lượng vé tối đa trong ngày phải là số nguyên dương!');
+        return;
+      }
       
-      // Định dạng lại giá cho từng service
-      const services = form.services.map(s => ({
-        ...s,
-        price: s.price ? Number(s.price.replace(/\./g, '')) : 0
-      }));
+      // Định dạng lại services theo đúng API structure
+      const services = form.services.length > 0 ? form.services.map(s => ({
+        name: s.name,
+        type: s.type,
+        options: s.options.map(opt => ({
+          title: opt.title || '',
+          price_extra: Number(opt.price_extra) || 0,
+          description: opt.description || ''
+        }))
+      })) : []; // Fallback to empty array if no services
       
       // Prepare final data with careful validation
       const tourData = {
@@ -350,14 +460,15 @@ function AddTour() {
         description: form.description.trim(),
         price,
         price_child,
+        max_tickets_per_day,
         location: form.location.trim(),
         lat: form.lat ? parseFloat(form.lat) : 0,
         lng: form.lng ? parseFloat(form.lng) : 0,
         rating: form.rating || 0,
         cateID,
         supplier_id,
-        open_time: form.open_time,
-        close_time: form.close_time,
+        opening_time: form.opening_time,
+        closing_time: form.closing_time,
         status: form.status,
         services,
         image: validImages,
@@ -369,14 +480,24 @@ function AddTour() {
         { field: 'description', value: tourData.description },
         { field: 'price', value: tourData.price },
         { field: 'price_child', value: tourData.price_child },
+        { field: 'max_tickets_per_day', value: tourData.max_tickets_per_day },
         { field: 'location', value: tourData.location },
         { field: 'cateID', value: tourData.cateID },
         { field: 'supplier_id', value: tourData.supplier_id },
-        { field: 'open_time', value: tourData.open_time },
-        { field: 'close_time', value: tourData.close_time },
+        { field: 'opening_time', value: tourData.opening_time },
+        { field: 'closing_time', value: tourData.closing_time },
         { field: 'status', value: tourData.status },
         { field: 'image', value: tourData.image }
       ];
+      
+      console.log('=== TIME FIELDS DEBUG ===');
+      console.log('Form opening_time:', form.opening_time, 'Type:', typeof form.opening_time);
+      console.log('Form closing_time:', form.closing_time, 'Type:', typeof form.closing_time);
+      console.log('Opening time empty?:', !form.opening_time);
+      console.log('Closing time empty?:', !form.closing_time);
+      console.log('TourData opening_time:', tourData.opening_time, 'Type:', typeof tourData.opening_time);
+      console.log('TourData closing_time:', tourData.closing_time, 'Type:', typeof tourData.closing_time);
+      console.log('============================');
       
       for (const check of requiredChecks) {
         if (!check.value || (Array.isArray(check.value) && check.value.length === 0)) {
@@ -389,11 +510,51 @@ function AddTour() {
       console.log('Final tour data being sent:', tourData);
       console.log('User role for API call:', userRole);
       
+      // Debug: Log individual fields to check for issues
+      console.log('=== DETAILED TOUR DATA DEBUG ===');
+      console.log('Name:', tourData.name, 'Type:', typeof tourData.name);
+      console.log('Description length:', tourData.description?.length);
+      console.log('Price:', tourData.price, 'Type:', typeof tourData.price);
+      console.log('Price child:', tourData.price_child, 'Type:', typeof tourData.price_child);
+      console.log('Max tickets per day:', tourData.max_tickets_per_day, 'Type:', typeof tourData.max_tickets_per_day);
+      console.log('Location:', tourData.location, 'Type:', typeof tourData.location);
+      console.log('Category ID:', tourData.cateID, 'Type:', typeof tourData.cateID);
+      console.log('Supplier ID:', tourData.supplier_id, 'Type:', typeof tourData.supplier_id);
+      console.log('Opening time:', tourData.opening_time);
+      console.log('Closing time:', tourData.closing_time);
+      console.log('Status:', tourData.status);
+      console.log('Services count:', tourData.services?.length);
+      if (tourData.services?.length > 0) {
+        console.log('Services structure:');
+        tourData.services.forEach((service, idx) => {
+          console.log(`  Service ${idx + 1}:`, {
+            name: service.name,
+            type: service.type,
+            optionsCount: service.options?.length
+          });
+          service.options?.forEach((option, optIdx) => {
+            console.log(`    Option ${optIdx + 1}:`, {
+              title: option.title,
+              price_extra: option.price_extra,
+              description: option.description
+            });
+          });
+        });
+      }
+      console.log('Images count:', tourData.image?.length);
+      if (tourData.image?.length > 0) {
+        console.log('First image preview:', tourData.image[0].substring(0, 100) + '...');
+      }
+      console.log('===============================');
+      
       // Gửi dữ liệu chuẩn hóa với userRole để chọn đúng endpoint
       await createTour(tourData, userRole);
       setMissingFields({});
       alert('Thêm tour thành công!');
-      window.history.back();
+      
+      // Redirect to tours page and force refresh
+      navigate('/tours');
+      window.location.reload();
     } catch (err) {
       console.error('Error creating tour:', err);
       console.error('Error response:', err.response?.data);
@@ -490,49 +651,86 @@ function AddTour() {
                 <button type="button" className="btn btn-sm btn-success ml-2" onClick={handleAddService}>
                   + Thêm dịch vụ
                 </button>
+                <small className="text-muted ml-3">
+                  <i className="fas fa-info-circle mr-1"></i>
+                  Ví dụ: Lưu trú (single), Hướng dẫn viên (multiple)
+                </small>
               </div>
               {form.services.length === 0 && (
-                <div className="text-muted mb-2">Chưa có dịch vụ nào.</div>
+                <div className="alert alert-info">
+                  <strong>Hướng dẫn:</strong> Dịch vụ đi kèm giúp khách hàng tùy chọn thêm các tiện ích cho tour.
+                  <br />
+                  <strong>Single:</strong> Khách chỉ chọn được 1 tùy chọn (ví dụ: loại phòng khách sạn)
+                  <br />
+                  <strong>Multiple:</strong> Khách có thể chọn nhiều tùy chọn (ví dụ: hướng dẫn viên + bữa ăn)
+                </div>
               )}
               {form.services.map((service, sIdx) => (
-                <div key={`service-${Date.now()}-${sIdx}`} className="border rounded p-3 mb-3 bg-light position-relative">
+                <div key={service.id || `service-${sIdx}`} className="border rounded p-3 mb-3 bg-light position-relative">
                   <button type="button" className="btn btn-danger btn-sm position-absolute" style={{ top: 8, right: 8 }} onClick={() => handleRemoveService(sIdx)}>
                     Xóa
                   </button>
                   <div className="form-row">
-                    <div className="form-group col-md-4">
+                    <div className="form-group col-md-6">
                       <label>Tên dịch vụ</label>
-                      <input type="text" className="form-control" value={service.name} onChange={e => handleServiceChange(sIdx, 'name', e.target.value)} placeholder="Tên dịch vụ" required />
+                      <input type="text" className="form-control" value={service.name} onChange={e => handleServiceChange(sIdx, 'name', e.target.value)} placeholder="Ví dụ: Lưu trú" required />
                     </div>
-                    <div className="form-group col-md-4">
+                    <div className="form-group col-md-6">
                       <label>Loại dịch vụ</label>
-                      <input type="text" className="form-control" value={service.type} onChange={e => handleServiceChange(sIdx, 'type', e.target.value)} placeholder="Loại" required />
-                    </div>
-                    <div className="form-group col-md-4">
-                      <label>Giá dịch vụ</label>
-                      <div className="input-group">
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={service.price}
-                          onChange={e => handleServiceChange(sIdx, 'price', e.target.value)}
-                          placeholder="Giá"
-                          inputMode="numeric"
-                          pattern="[0-9.]*"
-                          required
-                        />
-                        <div className="input-group-append"><span className="input-group-text">VNĐ</span></div>
-                      </div>
+                      <select className="form-control" value={service.type} onChange={e => handleServiceChange(sIdx, 'type', e.target.value)} required>
+                        <option value="">-- Chọn loại --</option>
+                        <option value="single">Chọn một (single)</option>
+                        <option value="multiple">Chọn nhiều (multiple)</option>
+                      </select>
                     </div>
                   </div>
                   <div>
-                    <label>Option dịch vụ</label>
+                    <label>Tùy chọn dịch vụ</label>
                     {service.options.map((opt, oIdx) => (
-                      <div key={`option-${Date.now()}-${sIdx}-${oIdx}`} className="input-group mb-2">
-                        <input type="text" className="form-control" value={opt} onChange={e => handleServiceOptionChange(sIdx, oIdx, e.target.value)} placeholder={`Option ${oIdx + 1}`} required />
-                        <div className="input-group-append">
-                          <button type="button" className="btn btn-outline-danger" onClick={() => handleRemoveOption(sIdx, oIdx)} disabled={service.options.length === 1}>-</button>
-                          <button type="button" className="btn btn-outline-primary ml-1" onClick={() => handleAddOption(sIdx)}>+</button>
+                      <div key={opt.id || `option-${sIdx}-${oIdx}`} className="border rounded p-2 mb-2 bg-white">
+                        <div className="form-row">
+                          <div className="form-group col-md-4">
+                            <label className="small">Tên tùy chọn</label>
+                            <input 
+                              type="text" 
+                              className="form-control form-control-sm" 
+                              value={opt.title || ''} 
+                              onChange={e => handleServiceOptionChange(sIdx, oIdx, 'title', e.target.value)} 
+                              placeholder="Ví dụ: Khách sạn khu vực Phố cổ" 
+                              required 
+                            />
+                          </div>
+                          <div className="form-group col-md-3">
+                            <label className="small">Giá thêm (VNĐ)</label>
+                            <input 
+                              type="number" 
+                              className="form-control form-control-sm" 
+                              value={opt.price_extra || 0} 
+                              onChange={e => handleServiceOptionChange(sIdx, oIdx, 'price_extra', e.target.value)} 
+                              placeholder="0" 
+                              min="0"
+                            />
+                          </div>
+                          <div className="form-group col-md-4">
+                            <label className="small">Mô tả</label>
+                            <input 
+                              type="text" 
+                              className="form-control form-control-sm" 
+                              value={opt.description || ''} 
+                              onChange={e => handleServiceOptionChange(sIdx, oIdx, 'description', e.target.value)} 
+                              placeholder="Mô tả ngắn" 
+                            />
+                          </div>
+                          <div className="form-group col-md-1 d-flex align-items-end">
+                            <div className="btn-group-vertical btn-group-sm">
+                              <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => handleRemoveOption(sIdx, oIdx)} disabled={service.options.length === 1}>
+                                <i className="fas fa-trash"></i>
+                              </button>
+                              <button type="button" className="btn btn-outline-primary btn-sm" onClick={() => handleAddOption(sIdx)}>
+                                <i className="fas fa-plus"></i>
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -573,29 +771,52 @@ function AddTour() {
                 <label>Giá vé</label>
                 <div className="input-group">
                   <input type="text" className="form-control bg-light" name="price" value={form.price} onChange={handleFormChange} required inputMode="numeric" pattern="[0-9.]*" />
-                  {missingFields.price && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
                   <div className="input-group-append"><span className="input-group-text">VNĐ</span></div>
                 </div>
+                {missingFields.price && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
               </div>
               <div className="form-group col-md-6">
                 <label>Giá trẻ em</label>
                 <div className="input-group">
                   <input type="text" className="form-control bg-light" name="price_child" value={form.price_child} onChange={handleFormChange} required inputMode="numeric" pattern="[0-9.]*" />
-                  {missingFields.price_child && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
                   <div className="input-group-append"><span className="input-group-text">VNĐ</span></div>
                 </div>
+                {missingFields.price_child && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+              </div>
+            </div>
+            <div className="row">
+              <div className="form-group col-md-6">
+                <label>Số lượng vé tối đa trong ngày</label>
+                <div className="input-group">
+                  <input 
+                    type="number" 
+                    className="form-control bg-light" 
+                    name="max_tickets_per_day" 
+                    value={form.max_tickets_per_day} 
+                    onChange={handleFormChange} 
+                    required 
+                    min="1"
+                    step="1"
+                    placeholder="Nhập số lượng vé tối đa"
+                  />
+                  <div className="input-group-append"><span className="input-group-text">vé</span></div>
+                </div>
+                {missingFields.max_tickets_per_day && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+                <small className="text-muted">Số lượng vé tối đa có thể bán trong một ngày</small>
               </div>
             </div>
             <div className="row">
               <div className="form-group col-md-6">
                 <label>Giờ mở cửa</label>
-                <input type="time" className="form-control bg-light" name="open_time" value={form.open_time || ''} onChange={handleFormChange} />
-                {missingFields.open_time && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+                <input type="time" className="form-control bg-light" name="opening_time" value={form.opening_time || ''} onChange={handleFormChange} required />
+                {missingFields.opening_time && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+                <small className="text-muted">Nhập giờ mở cửa của tour</small>
               </div>
               <div className="form-group col-md-6">
                 <label>Giờ đóng cửa</label>
-                <input type="time" className="form-control bg-light" name="close_time" value={form.close_time || ''} onChange={handleFormChange} />
-                {missingFields.close_time && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+                <input type="time" className="form-control bg-light" name="closing_time" value={form.closing_time || ''} onChange={handleFormChange} required />
+                {missingFields.closing_time && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+                <small className="text-muted">Nhập giờ đóng cửa của tour</small>
               </div>
             </div>
             
@@ -605,7 +826,7 @@ function AddTour() {
               {missingFields.image && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
               <div className="d-flex flex-wrap mt-2">
                 {form.image && form.image.map((img, idx) => (
-                  <img key={`preview-img-${Date.now()}-${idx}`} src={img} alt="tour" style={{ width: 60, height: 40, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
+                  <img key={`preview-img-${idx}`} src={img} alt="tour" style={{ width: 60, height: 40, objectFit: 'cover', marginRight: 8, marginBottom: 8 }} />
                 ))}
               </div>
             </div>
@@ -690,24 +911,29 @@ function AddTour() {
                   disabled={userRole === 'supplier'}
                 >
                   {userRole === 'supplier' ? (
-                    // Nếu là supplier, chỉ hiển thị tên của supplier hiện tại
-                    suppliers.filter(sup => sup._id === currentUser?._id).map((sup, idx) => (
-                      <option key={`current-supplier-${sup._id}-${idx}`} value={sup._id}>
-                        {sup.name}
-                      </option>
-                    ))
+                    // Nếu là supplier, hiển thị tên của supplier hiện tại
+                    <>
+                      {currentUser && (currentUser.first_name || currentUser.name) ? (
+                        <option value={currentUser._id}>
+                          {currentUser.first_name || currentUser.name} (Bạn)
+                        </option>
+                      ) : (
+                        <option value="">Đang tải thông tin supplier...</option>
+                      )}
+                    </>
                   ) : (
                     // Nếu là admin, hiển thị tất cả supplier với option mặc định
                     <>
                       <option value="">-- Chọn nhà cung cấp --</option>
                       {suppliers.map((sup, idx) => (
                         <option key={`all-supplier-${sup._id}-${idx}`} value={sup._id}>
-                          {sup.name}
+                          {sup.first_name || sup.name || sup.email || `Supplier ${idx + 1}`}
                         </option>
                       ))}
                     </>
                   )}
                 </select>
+                {missingFields.supplier_id && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
                 {userRole === 'supplier' && (
                   <small className="text-info mt-1 d-block">
                     <i className="fas fa-lock mr-1"></i>

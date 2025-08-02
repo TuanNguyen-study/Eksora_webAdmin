@@ -1,37 +1,23 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { getAllBookings, getCurrentUserRole } from '../api/api';
+import React, { useState, useEffect, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
+import { getAllBookings } from '../api/api';
 import { useNavigate } from 'react-router-dom';
-
-// Tạm thời comment timeGridPlugin cho đến khi cài đặt package
-// import timeGridPlugin from '@fullcalendar/timegrid';
+import { useAuth } from '../context/AuthContext';
 
 function Calendar() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState(null);
   const [bookingsData, setBookingsData] = useState([]);
-  const calendarRef = useRef(null);
-  
+  const { user } = useAuth();
+  const userRole = user?.role;
   const navigate = useNavigate();
+  const calendarRef = useRef(null);
 
+  // Load calendar data when component mounts
   useEffect(() => {
-    const fetchUserRole = async () => {
-      try {
-        const role = await getCurrentUserRole();
-        setUserRole(role);
-      } catch (error) {
-        console.error('Error getting user role:', error);
-      }
-    };
-
-    fetchUserRole();
-  }, []);
-
-  useEffect(() => {
-    if (userRole === 'admin') {
+    if (userRole) {
       fetchBookings();
     }
   }, [userRole]);
@@ -47,6 +33,7 @@ function Calendar() {
           }
         } catch (error) {
           // Ignore cleanup errors - calendar may already be destroyed
+          console.log('Calendar cleanup handled gracefully:', error.message);
         }
       }
     };
@@ -54,28 +41,62 @@ function Calendar() {
 
   async function fetchBookings() {
     setLoading(true);
+    console.log('=== STARTING CALENDAR DATA FETCH ===');
     try {
       const data = await getAllBookings();
+      console.log('=== CALENDAR DEBUG ===');
+      console.log('Raw booking data:', data);
+      console.log('Total bookings:', data?.length);
+      console.log('Data type:', typeof data);
+      console.log('Is array:', Array.isArray(data));
       
-      if (!data || !Array.isArray(data) || data.length === 0) {
+      if (!data) {
+        console.error('API returned null/undefined');
         setEvents([]);
         setBookingsData([]);
         return;
       }
       
+      if (!Array.isArray(data)) {
+        console.error('API did not return an array:', data);
+        setEvents([]);
+        setBookingsData([]);
+        return;
+      }
+      
+      if (data.length === 0) {
+        console.log('No bookings found - empty array');
+        setEvents([]);
+        setBookingsData([]);
+        return;
+      }
+      
+      console.log('First booking sample:', data[0]);
       setBookingsData(data);
+      
+      // Xử lý dữ liệu booking thật
+      console.log('Processing real booking data...');
       
       // Group bookings by date and tour
       const bookingsByDate = {};
       
       data.forEach((booking, index) => {
+        console.log(`Processing booking ${index + 1}:`, booking);
+        
+        // Sử dụng booking_date thay vì travel_date
         if (booking.booking_date) {
+          // Đảm bảo format ngày đúng cho FullCalendar (YYYY-MM-DD)
           const bookingDate = new Date(booking.booking_date);
-          const dateKey = bookingDate.toISOString().split('T')[0];
+          const dateKey = bookingDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD
           const tourId = booking.tour_id?._id || booking.tour_id;
           const tourName = booking.tour_id?.name || `Tour ${tourId}`;
           
-          if (!tourId) return;
+          console.log(`Booking date: ${booking.booking_date}, dateKey: ${dateKey}, tourId: ${tourId}, tourName: ${tourName}`);
+          
+          if (!tourId) {
+            console.log('Skipping booking - no tour ID');
+            return;
+          }
           
           if (!bookingsByDate[dateKey]) {
             bookingsByDate[dateKey] = {};
@@ -90,11 +111,16 @@ function Calendar() {
           }
           
           bookingsByDate[dateKey][tourId].bookings.push(booking);
+          // Use appropriate guest count fields
           const adults = booking.quantity_nguoiLon || booking.adult_count || 1;
           const children = booking.quantity_treEm || booking.child_count || 0;
           bookingsByDate[dateKey][tourId].totalGuests += adults + children;
+        } else {
+          console.log('Skipping booking - no booking_date:', booking);
         }
       });
+      
+      console.log('Grouped bookings by date:', bookingsByDate);
       
       // Convert to FullCalendar events
       const calendarEvents = [];
@@ -105,11 +131,12 @@ function Calendar() {
           const bookingCount = tourData.bookings.length;
           const guestCount = tourData.totalGuests;
           
-          let backgroundColor = '#28a745';
+          // Color based on number of guests
+          let backgroundColor = '#28a745'; // Green for low
           if (guestCount > 50) {
-            backgroundColor = '#dc3545';
+            backgroundColor = '#dc3545'; // Red for high
           } else if (guestCount > 20) {
-            backgroundColor = '#ffc107';
+            backgroundColor = '#ffc107'; // Yellow for medium
           }
           
           const eventData = {
@@ -130,10 +157,12 @@ function Calendar() {
             }
           };
           
+          console.log('Adding real event:', eventData);
           calendarEvents.push(eventData);
         });
       });
       
+      console.log('Real calendar events created:', calendarEvents.length, calendarEvents);
       setEvents(calendarEvents);
       
     } catch (err) {
@@ -146,8 +175,15 @@ function Calendar() {
 
   // Handle event click - navigate to booking page with filters
   const handleEventClick = (clickInfo) => {
+    console.log('=== EVENT CLICKED ===');
+    console.log('Event:', clickInfo.event);
+    console.log('Event props:', clickInfo.event.extendedProps);
+    
     const { tourId, tourName, date } = clickInfo.event.extendedProps;
     
+    console.log('Navigation params:', { date, tourId, tourName });
+    
+    // Navigate to Booking page with filters
     navigate('/bookings', {
       state: {
         filters: {
@@ -157,18 +193,28 @@ function Calendar() {
         }
       }
     });
+    
+    console.log('Navigation completed');
   };
 
-  // Handle date selection
+  // Đánh dấu ngày bằng cách click (không làm mất data booking)
   const handleDateSelect = (selectInfo) => {
     const selectedDate = selectInfo.startStr;
     
+    console.log('=== DATE SELECTED ===');
+    console.log('Selected date:', selectedDate);
+    
+    // Check if there are any bookings on this date - sử dụng booking_date
     const dayBookings = bookingsData.filter(booking => {
       const bookingDate = booking.booking_date;
       return bookingDate && bookingDate.split('T')[0] === selectedDate;
     });
     
+    console.log('Bookings found for this date:', dayBookings.length);
+    
     if (dayBookings.length > 0) {
+      console.log('Navigating to bookings page with date filter');
+      // Navigate to booking page with date filter
       navigate('/bookings', {
         state: {
           filters: {
@@ -177,6 +223,8 @@ function Calendar() {
         }
       });
     } else {
+      console.log('No bookings found, adding mark');
+      // Add a mark for empty days
       setEvents(prev => [...prev, {
         title: 'Đánh dấu',
         start: selectInfo.startStr,
@@ -226,9 +274,15 @@ function Calendar() {
               </div>
               <button 
                 className="btn btn-sm btn-outline-info"
-                onClick={fetchBookings}
+                onClick={() => {
+                  console.log('=== DEBUG INFO ===');
+                  console.log('Events:', events);
+                  console.log('Bookings Data:', bookingsData);
+                  console.log('Loading:', loading);
+                  fetchBookings();
+                }}
               >
-                � Tải lại
+                🔍 Debug & Reload
               </button>
             </div>
             <div className="d-flex align-items-center">
@@ -241,8 +295,8 @@ function Calendar() {
                 Click vào ngày trống để xem tất cả booking ngày đó
               </small>
               <small className="text-success ml-3">
-                <i className="fas fa-calendar-check mr-1"></i>
-                {events.length} lịch trình
+                <i className="fas fa-database mr-1"></i>
+                {events.length} events | {bookingsData.length} bookings
               </small>
             </div>
           </div>

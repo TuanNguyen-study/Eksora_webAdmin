@@ -1,31 +1,7 @@
 
-import React, { useEffect, useState, useRef } from 'react';
-import JsBarcode from 'jsbarcode';
+import React, { useEffect, useState } from 'react';
 import { getAllBookings, updateBookingStatus, getCurrentUserRole, getUser } from '../api/api';
 import { useLocation } from 'react-router-dom';
-
-// Component hiển thị barcode mã thanh toán
-function BookingBarcode({ orderCode }) {
-  const barcodeRef = useRef(null);
-  useEffect(() => {
-    if (barcodeRef.current && orderCode) {
-      JsBarcode(barcodeRef.current, orderCode, {
-        format: "CODE128",
-        lineColor: "#000",
-        width: 2,
-        height: 40,
-        displayValue: true,
-      });
-    }
-  }, [orderCode]);
-  if (!orderCode) return null;
-  return (
-    <div style={{margin: '12px 0'}}>
-      <label><b>Mã thanh toán:</b> {orderCode}</label>
-      <svg ref={barcodeRef}></svg>
-    </div>
-  );
-}
 
 function Bookings() {
   const [userId, setUserId] = useState('');
@@ -42,8 +18,28 @@ function Bookings() {
   const [productTypeFilter, setProductTypeFilter] = useState('all');
   const [userRole, setUserRole] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [calendarFilters, setCalendarFilters] = useState(null);
   const bookingsPerPage = 10;
   const location = useLocation();
+
+  // Xử lý filters từ calendar
+  useEffect(() => {
+    if (location.state?.filters) {
+      setCalendarFilters(location.state.filters);
+      
+      // Apply calendar filters
+      const { date, tourId, tourName } = location.state.filters;
+      
+      if (date) {
+        setDateFilter('custom');
+        // Set date filter to specific date
+      }
+      
+      if (tourId) {
+        setProductTypeFilter(tourId);
+      }
+    }
+  }, [location.state]);
 
   useEffect(() => {
     async function fetchData() {
@@ -87,6 +83,28 @@ function Bookings() {
   // Hàm lọc tổng hợp
   useEffect(() => {
     let filtered = allBookings;
+    
+    // Apply calendar filters first
+    if (calendarFilters) {
+      const { date, tourId } = calendarFilters;
+      
+      if (date) {
+        filtered = filtered.filter(b => {
+          // Sử dụng booking_date và so sánh theo ngày (bỏ qua giờ)
+          const bookingDate = b.booking_date;
+          if (!bookingDate) return false;
+          return bookingDate.split('T')[0] === date.split('T')[0];
+        });
+      }
+      
+      if (tourId) {
+        filtered = filtered.filter(b => {
+          const bookingTourId = b.tour_id?._id || b.tour_id;
+          return bookingTourId === tourId;
+        });
+      }
+    }
+    
     // Lọc theo tên người đặt
     if (searchName.trim()) {
       filtered = filtered.filter(b => {
@@ -95,7 +113,7 @@ function Bookings() {
       });
     }
     // Lọc theo ngày đặt
-    if (dateFilter !== 'all') {
+    if (dateFilter !== 'all' && dateFilter !== 'custom') {
       const today = new Date();
       filtered = filtered.filter(b => {
         if (!b.booking_date) return false;
@@ -135,7 +153,7 @@ function Bookings() {
     setBookings(filtered);
     setCurrentPage(1);
     // eslint-disable-next-line
-  }, [searchName, dateFilter, statusFilter, productTypeFilter, allBookings]);
+  }, [searchName, dateFilter, statusFilter, productTypeFilter, allBookings, calendarFilters]);
 
   const handleSearch = () => {
     if (!searchName.trim()) {
@@ -322,6 +340,42 @@ function Bookings() {
     <div className="content-wrapper bg-white min-vh-100">
       <div className="content-header bg-white">
         <div className="container-fluid">
+          {/* Calendar filter banner */}
+          {calendarFilters && (
+            <div className="row mb-3">
+              <div className="col-12">
+                <div className="alert alert-info alert-dismissible">
+                  <button 
+                    type="button" 
+                    className="close" 
+                    onClick={() => setCalendarFilters(null)}
+                  >
+                    <span>&times;</span>
+                  </button>
+                  <h6>
+                    <i className="fas fa-calendar-alt mr-2"></i>
+                    Đang xem booking từ Calendar
+                  </h6>
+                  <p className="mb-0">
+                    {calendarFilters.date && (
+                      <span className="badge badge-primary mr-2">
+                        Ngày: {new Date(calendarFilters.date).toLocaleDateString('vi-VN')}
+                      </span>
+                    )}
+                    {calendarFilters.tourName && (
+                      <span className="badge badge-success mr-2">
+                        Tour: {calendarFilters.tourName}
+                      </span>
+                    )}
+                    <small className="text-muted">
+                      Đóng thông báo này để xem tất cả booking
+                    </small>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="row mb-2">
             <div className="col-sm-6">
               <div className="d-flex align-items-center">
@@ -434,7 +488,6 @@ function Bookings() {
                       <th>Số lượng trẻ em</th>
                       <th>Dịch vụ đi kèm</th>
                       <th>Thành Tiền</th>
-                      <th>Mã thanh toán</th>
                       <th>Trạng thái</th>
                       <th>Hành động</th>
                       <th>Xác nhận</th>
@@ -460,9 +513,6 @@ function Bookings() {
                             : <span style={{color:'#888'}}>Không có</span>}
                         </td>
                         <td>{b.totalPrice?.toLocaleString('vi-VN')} đ</td>
-                        <td style={{minWidth: 120}}>
-                          {b.order_code ? <BookingBarcode orderCode={b.order_code} /> : <span style={{color:'#888'}}>N/A</span>}
-                        </td>
                         <td>
                           <span className={`badge badge-${b.status === 'pending' ? 'warning' : b.status === 'confirmed' ? 'info' : b.status === 'paid' ? 'primary' : b.status === 'ongoing' ? 'success' : b.status === 'completed' ? 'success' : b.status === 'canceled' || b.status === 'cancelled' ? 'danger' : b.status === 'refund_requested' ? 'warning' : b.status === 'refunded' ? 'info' : b.status === 'expired' ? 'secondary' : 'secondary'}`}>
                             {
@@ -554,13 +604,6 @@ function Bookings() {
                     </tr>
                     <tr><td><b>Tổng tiền:</b></td><td>{selectedBooking.totalPrice?.toLocaleString()} VNĐ</td></tr>
                     <tr><td><b>Trạng thái:</b></td><td>{selectedBooking.status === 'pending' ? 'Chưa thanh toán' : selectedBooking.status === 'confirmed' ? 'Đã xác nhận' : selectedBooking.status === 'success' ? 'Đã thanh toán' : selectedBooking.status === 'cancelled' ? 'Đã hủy' : selectedBooking.status}</td></tr>
-                    <tr>
-                      <td><b>Mã thanh toán:</b></td>
-                      <td>
-                        {selectedBooking.order_code || 'N/A'}
-                        <BookingBarcode orderCode={selectedBooking.order_code} />
-                      </td>
-                    </tr>
                     <tr><td><b>Lần cập nhật trạng thái gần nhất:</b></td><td>{selectedBooking.last_update ? new Date(selectedBooking.last_update).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A'}</td></tr>
                   </tbody>
                 </table>
