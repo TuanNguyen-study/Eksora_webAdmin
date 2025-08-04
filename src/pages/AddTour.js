@@ -703,12 +703,20 @@ function AddTour() {
                           <div className="form-group col-md-3">
                             <label className="small">Giá thêm (VNĐ)</label>
                             <input 
-                              type="number" 
+                              type="text" 
                               className="form-control form-control-sm" 
-                              value={opt.price_extra || 0} 
-                              onChange={e => handleServiceOptionChange(sIdx, oIdx, 'price_extra', e.target.value)} 
+                              value={opt.price_extra ? opt.price_extra.toLocaleString('vi-VN') : '0'} 
+                              onChange={(e) => {
+                                // Remove all dots and convert to number
+                                const numericValue = parseInt(e.target.value.replace(/\./g, '')) || 0;
+                                handleServiceOptionChange(sIdx, oIdx, 'price_extra', numericValue);
+                              }}
+                              onBlur={(e) => {
+                                // Format number on blur
+                                const numericValue = parseInt(e.target.value.replace(/\./g, '')) || 0;
+                                handleServiceOptionChange(sIdx, oIdx, 'price_extra', numericValue);
+                              }}
                               placeholder="0" 
-                              min="0"
                             />
                           </div>
                           <div className="form-group col-md-4">

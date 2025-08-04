@@ -252,7 +252,12 @@ function Home() {
   useEffect(() => {
     async function fetchHotDestinationsAndCategoryData() {
       try {
+        console.log('=== FETCHING HOT DESTINATIONS ===');
+        console.log('allBookings length:', allBookings.length);
+        
         const [categoriesData, toursData] = await Promise.all([getCategories(), getTours()]);
+        console.log('categoriesData length:', categoriesData.length);
+        console.log('toursData length:', toursData.length);
         
         // Analyze booking frequency by category
         const categoryBookings = {};
@@ -280,6 +285,8 @@ function Home() {
             }
           }
         });
+
+        console.log('categoryBookings:', categoryBookings);
 
         // Map category names and create hot destinations with random images
         const hotDestinationsData = Object.values(categoryBookings).map(cat => {
@@ -314,7 +321,42 @@ function Home() {
           };
         }).sort((a, b) => b.bookingCount - a.bookingCount).slice(0, 6);
 
-        setHotDestinations(hotDestinationsData);
+        console.log('hotDestinationsData final:', hotDestinationsData);
+        
+        // If no real data, add some demo data for testing
+        if (hotDestinationsData.length === 0) {
+          console.log('No booking data found, adding demo destinations');
+          const demoDestinations = [
+            {
+              categoryId: 'demo1',
+              categoryName: 'Thành phố Hồ Chí Minh',
+              bookingCount: 0,
+              totalGuests: 0,
+              totalRevenue: 0,
+              icon: 'fas fa-city',
+              region: 'Miền Nam',
+              province: 'TP.HCM',
+              coordinates: [10.8231, 106.6297],
+              randomImage: null
+            },
+            {
+              categoryId: 'demo2', 
+              categoryName: 'Hà Nội',
+              bookingCount: 0,
+              totalGuests: 0,
+              totalRevenue: 0,
+              icon: 'fas fa-landmark',
+              region: 'Miền Bắc',
+              province: 'Hà Nội',
+              coordinates: [21.0285, 105.8542],
+              randomImage: null
+            }
+          ];
+          setHotDestinations(demoDestinations);
+        } else {
+          setHotDestinations(hotDestinationsData);
+        }
+        
         setCategoryBookingData(Object.values(categoryBookings));
 
         // Create enhanced map chart data with regional information
@@ -373,6 +415,36 @@ function Home() {
 
     if (allBookings.length > 0) {
       fetchHotDestinationsAndCategoryData();
+    } else {
+      // If no bookings, set demo data to show UI
+      console.log('No bookings data, setting demo destinations');
+      const demoDestinations = [
+        {
+          categoryId: 'demo1',
+          categoryName: 'Thành phố Hồ Chí Minh',
+          bookingCount: 0,
+          totalGuests: 0,
+          totalRevenue: 0,
+          icon: 'fas fa-city',
+          region: 'Miền Nam',
+          province: 'TP.HCM',
+          coordinates: [10.8231, 106.6297],
+          randomImage: null
+        },
+        {
+          categoryId: 'demo2', 
+          categoryName: 'Hà Nội',
+          bookingCount: 0,
+          totalGuests: 0,
+          totalRevenue: 0,
+          icon: 'fas fa-landmark',
+          region: 'Miền Bắc',
+          province: 'Hà Nội',
+          coordinates: [21.0285, 105.8542],
+          randomImage: null
+        }
+      ];
+      setHotDestinations(demoDestinations);
     }
   }, [allBookings]);
   return (
@@ -641,9 +713,17 @@ function Home() {
                     </h5>
                   </div>
                   <div className="card-body">
-                    <div className="row">
-                      {hotDestinations.map((destination, index) => (
-                        <div key={destination.categoryId} className="col-md-4 col-sm-6 mb-3">
+                    {console.log('Rendering hot destinations, count:', hotDestinations.length)}
+                    {hotDestinations.length === 0 ? (
+                      <div className="text-center py-4">
+                        <i className="fas fa-map-marked-alt fa-3x text-muted mb-3"></i>
+                        <h5>Đang tải dữ liệu địa điểm...</h5>
+                        <p>Chưa có dữ liệu booking để hiển thị địa điểm hot.</p>
+                      </div>
+                    ) : (
+                      <div className="row">
+                        {hotDestinations.map((destination, index) => (
+                          <div key={destination.categoryId} className="col-md-4 col-sm-6 mb-3">
                           <div className="info-box bg-gradient-light shadow-sm">
                             {destination.randomImage ? (
                               <span className="info-box-icon" style={{ padding: '0', overflow: 'hidden' }}>
@@ -714,7 +794,8 @@ function Home() {
                           </div>
                         </div>
                       ))}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

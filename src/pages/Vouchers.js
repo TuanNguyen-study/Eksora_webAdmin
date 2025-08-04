@@ -18,9 +18,12 @@ function Vouchers() {
       setError(null);
       try {
         const data = await getPromotion();
-        setVouchers(data);
+        // Đảm bảo data là array
+        const voucherArray = Array.isArray(data) ? data : [];
+        setVouchers(voucherArray);
       } catch (err) {
         setError('Không thể tải danh sách voucher!');
+        setVouchers([]); // Set empty array khi có lỗi
       } finally {
         setLoading(false);
       }
@@ -71,8 +74,8 @@ function Vouchers() {
   // Phân trang
   const indexOfLastVoucher = currentPage * vouchersPerPage;
   const indexOfFirstVoucher = indexOfLastVoucher - vouchersPerPage;
-  const currentVouchers = vouchers.slice(indexOfFirstVoucher, indexOfLastVoucher);
-  const totalPages = Math.ceil(vouchers.length / vouchersPerPage);
+  const currentVouchers = Array.isArray(vouchers) ? vouchers.slice(indexOfFirstVoucher, indexOfLastVoucher) : [];
+  const totalPages = Math.ceil((vouchers?.length || 0) / vouchersPerPage);
   const isDark = document.body.classList.contains('dark-mode');
 
   return (
@@ -103,45 +106,59 @@ function Vouchers() {
             <>
               <div className={`card ${isDark ? 'bg-dark text-light' : ''}`}>
                 <div className="card-body">
-                  <table className={`table table-bordered ${isDark ? 'bg-dark text-light' : ''}`}>
-                    <thead>
-                      <tr>
-                        <th>Mã Voucher</th>
-                        <th>Giảm giá (%)</th>
-                        <th>Điều kiện</th>
-                        <th>Ngày bắt đầu</th>
-                        <th>Ngày kết thúc</th>
-                        <th>Trạng thái</th>
-                        <th>Hành động</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentVouchers.map(voucher => (
-                        <tr key={voucher._id}>
-                          <td>{voucher.code}</td>
-                          <td>{voucher.discount}</td>
-                          <td>{voucher.condition}</td>
-                          <td>{voucher.start_date ? new Date(voucher.start_date).toLocaleDateString() : ''}</td>
-                          <td>{voucher.end_date ? new Date(voucher.end_date).toLocaleDateString() : ''}</td>
-                          <td>{voucher.status}</td>
-                          <td>
-                            <button className="btn btn-info btn-sm mr-2" onClick={() => handleView(voucher)}>
-                              <i className="fas fa-eye mr-1"></i> Xem
-                            </button>
-                            <button className="btn btn-warning btn-sm mr-2" onClick={() => handleEdit(voucher)}>
-                              <i className="fas fa-edit mr-1"></i> Sửa
-                            </button>
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(voucher._id)}>
-                              <i className="fas fa-trash mr-1"></i> Xóa
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  {currentVouchers && currentVouchers.length > 0 ? (
+                    <>
+                      <table className={`table table-bordered ${isDark ? 'bg-dark text-light' : ''}`}>
+                        <thead>
+                          <tr>
+                            <th>Mã Voucher</th>
+                            <th>Giảm giá (%)</th>
+                            <th>Điều kiện</th>
+                            <th>Ngày bắt đầu</th>
+                            <th>Ngày kết thúc</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {currentVouchers.map(voucher => (
+                            <tr key={voucher._id}>
+                              <td>{voucher.code}</td>
+                              <td>{voucher.discount}</td>
+                              <td>{voucher.condition}</td>
+                              <td>{voucher.start_date ? new Date(voucher.start_date).toLocaleDateString() : ''}</td>
+                              <td>{voucher.end_date ? new Date(voucher.end_date).toLocaleDateString() : ''}</td>
+                              <td>
+                                <span className={`badge ${voucher.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
+                                  {voucher.status === 'active' ? 'Hoạt động' : 'Ngừng hoạt động'}
+                                </span>
+                              </td>
+                              <td>
+                                <button className="btn btn-info btn-sm mr-2" onClick={() => handleView(voucher)}>
+                                  <i className="fas fa-eye mr-1"></i> Xem
+                                </button>
+                                <button className="btn btn-warning btn-sm mr-2" onClick={() => handleEdit(voucher)}>
+                                  <i className="fas fa-edit mr-1"></i> Sửa
+                                </button>
+                                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(voucher._id)}>
+                                  <i className="fas fa-trash mr-1"></i> Xóa
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
+                  ) : (
+                    <div className="text-center py-4">
+                      <i className="fas fa-inbox fa-3x mb-3 text-muted"></i>
+                      <h5>Không có voucher nào</h5>
+                      <p>Hiện tại chưa có voucher nào trong hệ thống.</p>
+                    </div>
+                  )}
                   <div className="d-flex justify-content-between align-items-center mt-2">
                     <div>
-                      {vouchers.length > 0 && (
+                      {vouchers && vouchers.length > 0 && (
                         <span>
                           Showing {indexOfFirstVoucher + 1} to {Math.min(indexOfLastVoucher, vouchers.length)} of {vouchers.length} Vouchers
                         </span>
@@ -199,7 +216,11 @@ function Vouchers() {
                     <p><b>Điều kiện:</b> {selectedVoucher.condition}</p>
                     <p><b>Ngày bắt đầu:</b> {selectedVoucher.start_date ? new Date(selectedVoucher.start_date).toLocaleDateString() : ''}</p>
                     <p><b>Ngày kết thúc:</b> {selectedVoucher.end_date ? new Date(selectedVoucher.end_date).toLocaleDateString() : ''}</p>
-                    <p><b>Trạng thái:</b> {selectedVoucher.status === 'active' ? 'Active' : 'Deactive'}</p>
+                    <p><b>Trạng thái:</b> 
+                      <span className={`badge ml-2 ${selectedVoucher.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
+                        {selectedVoucher.status === 'active' ? 'Hoạt động' : 'Ngừng hoạt động'}
+                      </span>
+                    </p>
                   </div>
                 ) : (
                   <form onSubmit={handleFormSubmit}>
@@ -226,8 +247,8 @@ function Vouchers() {
                     <div className="form-group">
                       <label>Trạng thái</label>
                       <select className={`form-control ${isDark ? 'bg-dark text-light' : ''}`} name="status" value={form.status} onChange={handleFormChange} required>
-                        <option value="active">Active</option>
-                        <option value="deactive">Deactive</option>
+                        <option value="active">Hoạt động</option>
+                        <option value="deactive">Ngừng hoạt động</option>
                       </select>
                     </div>
                     <button type="submit" className="btn btn-success">Lưu</button>

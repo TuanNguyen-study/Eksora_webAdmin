@@ -19,10 +19,19 @@ function LastestReview() {
   useEffect(() => {
     getReviews()
       .then(data => {
-        // Sắp xếp mới nhất lên đầu
-        setReviews(data.sort((a, b) => new Date(b.created_at || b.createdAt) - new Date(a.created_at || a.createdAt)).slice(0, 5));
+        // Kiểm tra xem data có phải là array không
+        if (Array.isArray(data)) {
+          // Sắp xếp mới nhất lên đầu
+          setReviews(data.sort((a, b) => new Date(b.created_at || b.createdAt) - new Date(a.created_at || a.createdAt)).slice(0, 5));
+        } else {
+          console.error('Reviews data is not an array:', data);
+          setReviews([]);
+        }
       })
-      .catch(() => setError('Không thể tải review!'))
+      .catch(err => {
+        console.error('Error fetching reviews:', err);
+        setError('Không thể tải review!');
+      })
       .finally(() => setLoading(false));
   }, []);
 

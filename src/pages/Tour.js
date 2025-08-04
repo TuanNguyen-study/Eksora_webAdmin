@@ -956,10 +956,10 @@ function Tour() {
                         <b>Địa điểm:</b> <span className="ml-1">{selectedTour.location}</span>
                       </div>
                       <div className="col-md-6 mb-2">
-                        <b>Giá:</b> <span className="ml-1">{Number(selectedTour.price).toLocaleString('vi-VN')}VNĐ</span>
+                        <b>Giá:</b> <span className="ml-1 text-primary font-weight-bold">{Number(selectedTour.price).toLocaleString('vi-VN')} VNĐ</span>
                       </div>
                       <div className="col-md-6 mb-2">
-                        <b>Giá trẻ em:</b> <span className="ml-1">{Number(selectedTour.price_child).toLocaleString('vi-VN')}VNĐ</span>
+                        <b>Giá trẻ em:</b> <span className="ml-1 text-info font-weight-bold">{Number(selectedTour.price_child).toLocaleString('vi-VN')} VNĐ</span>
                       </div>
                       <div className="col-md-6 mb-2">
                         <b>Số vé tối đa/ngày:</b> <span className="ml-1">{selectedTour.max_tickets_per_day || 'N/A'} vé</span>
@@ -1042,7 +1042,7 @@ function Tour() {
                                           </div>
                                           {option.price_extra > 0 && (
                                             <span className="badge badge-warning">
-                                              +{option.price_extra.toLocaleString()} VNĐ
+                                              +{option.price_extra.toLocaleString('vi-VN')} VNĐ
                                             </span>
                                           )}
                                         </div>
@@ -1293,14 +1293,22 @@ function Tour() {
                                       <div className="col-md-3">
                                         <label className="small font-weight-bold">Giá phụ thu (VNĐ)</label>
                                         <input
-                                          type="number"
+                                          type="text"
                                           className="form-control form-control-sm"
                                           placeholder="0"
-                                          min="0"
-                                          value={option.price_extra || 0}
+                                          value={option.price_extra ? option.price_extra.toLocaleString('vi-VN') : '0'}
                                           onChange={(e) => {
                                             const newServices = [...form.services];
-                                            newServices[serviceIndex].options[optionIndex].price_extra = parseInt(e.target.value) || 0;
+                                            // Remove all dots and convert to number
+                                            const numericValue = parseInt(e.target.value.replace(/\./g, '')) || 0;
+                                            newServices[serviceIndex].options[optionIndex].price_extra = numericValue;
+                                            setForm({ ...form, services: newServices });
+                                          }}
+                                          onBlur={(e) => {
+                                            // Format number on blur
+                                            const newServices = [...form.services];
+                                            const numericValue = parseInt(e.target.value.replace(/\./g, '')) || 0;
+                                            newServices[serviceIndex].options[optionIndex].price_extra = numericValue;
                                             setForm({ ...form, services: newServices });
                                           }}
                                         />

@@ -343,7 +343,17 @@ export const toggleFavorite = async (userId, tourId, isFavorite) => {
 export const getPromotion = async () => {
   try {
     const response = await AxiosInstance.get('/api/vouchers');
-    return response.data;
+    const data = response.data;
+    
+    // Đảm bảo luôn trả về một array
+    if (Array.isArray(data)) {
+      return data;
+    } else if (data && typeof data === 'object') {
+      // Nếu data là object, tìm array trong các properties
+      const arrayValue = Object.values(data).find(value => Array.isArray(value));
+      return arrayValue || [];
+    }
+    return [];
   } catch (error) {
     console.error('Lỗi khi lấy danh sách Promotion:', error);
     throw error;
@@ -941,7 +951,20 @@ export const createSupplier = async (supplierData) => {
 export const getReviews = async () => {
   try {
     const response = await AxiosInstance.get('/api/reviews');
-    return response.data;
+    // Xử lý trường hợp response.data có thể là object chứa array
+    let reviewsArray = response.data;
+    if (reviewsArray && typeof reviewsArray === 'object' && !Array.isArray(reviewsArray)) {
+      // Nếu là object, tìm property chứa array
+      if (reviewsArray.reviews && Array.isArray(reviewsArray.reviews)) {
+        reviewsArray = reviewsArray.reviews;
+      } else if (reviewsArray.data && Array.isArray(reviewsArray.data)) {
+        reviewsArray = reviewsArray.data;
+      } else {
+        // Nếu không tìm thấy array, trả về empty array
+        reviewsArray = [];
+      }
+    }
+    return Array.isArray(reviewsArray) ? reviewsArray : [];
   } catch (error) {
     console.error('Lỗi khi lấy danh sách reviews:', error);
     throw error;
