@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getPromotion } from '../api/api';
+import { getPromotion, deleteVoucher } from '../api/api';
 
 function Vouchers() {
   const [vouchers, setVouchers] = useState([]);
@@ -44,9 +44,26 @@ function Vouchers() {
     setShowModal(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Bạn có chắc muốn xóa voucher này?')) {
-      setVouchers(vouchers.filter(v => v._id !== id));
+      try {
+        setLoading(true);
+        await deleteVoucher(id);
+        
+        // Cập nhật lại danh sách voucher sau khi xóa thành công
+        setVouchers(vouchers.filter(v => v._id !== id));
+        
+        // Nếu đang trong modal và xóa voucher hiện tại, đóng modal
+        if (selectedVoucher && selectedVoucher._id === id) {
+          setShowModal(false);
+          setSelectedVoucher(null);
+        }
+      } catch (error) {
+        console.error('Lỗi khi xóa voucher:', error);
+        // Toast error đã được xử lý trong API
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -140,8 +157,20 @@ function Vouchers() {
                                 <button className="btn btn-warning btn-sm mr-2" onClick={() => handleEdit(voucher)}>
                                   <i className="fas fa-edit mr-1"></i> Sửa
                                 </button>
-                                <button className="btn btn-danger btn-sm" onClick={() => handleDelete(voucher._id)}>
-                                  <i className="fas fa-trash mr-1"></i> Xóa
+                                <button 
+                                  className="btn btn-danger btn-sm" 
+                                  onClick={() => handleDelete(voucher._id)}
+                                  disabled={loading}
+                                >
+                                  {loading ? (
+                                    <>
+                                      <i className="fas fa-spinner fa-spin mr-1"></i> Đang xóa...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-trash mr-1"></i> Xóa
+                                    </>
+                                  )}
                                 </button>
                               </td>
                             </tr>
@@ -253,6 +282,41 @@ function Vouchers() {
                     </div>
                     <button type="submit" className="btn btn-success">Lưu</button>
                   </form>
+                )}
+              </div>
+              <div className={`modal-footer ${isDark ? 'bg-dark' : 'bg-light'}`}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                  <i className="fas fa-times mr-1"></i>Đóng
+                </button>
+                {modalType === 'view' && selectedVoucher && (
+                  <>
+                    <button 
+                      type="button" 
+                      className="btn btn-warning mr-2" 
+                      onClick={() => handleEdit(selectedVoucher)}
+                    >
+                      <i className="fas fa-edit mr-1"></i>Sửa
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn btn-danger" 
+                      onClick={() => {
+                        setShowModal(false);
+                        handleDelete(selectedVoucher._id);
+                      }}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <i className="fas fa-spinner fa-spin mr-1"></i>Đang xóa...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-trash mr-1"></i>Xóa
+                        </>
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

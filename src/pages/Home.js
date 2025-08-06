@@ -29,6 +29,7 @@ function Home() {
   const [categoryBookingData, setCategoryBookingData] = useState([]);
   const [mapChartData, setMapChartData] = useState(null);
 
+
   // Helper functions for hot destinations
   const getDestinationIcon = (categoryName) => {
     const name = categoryName.toLowerCase();
@@ -247,6 +248,9 @@ function Home() {
     setTotalRevenue(totalRevenue);
     setChartLoading(false);
   }, [selectedMonth, selectedYear, allBookings]);
+
+  // useEffect for top reviews of the month
+
 
   // New useEffect for hot destinations and category data
   useEffect(() => {
@@ -893,6 +897,9 @@ function Home() {
                 </div>
               </div>
             </div>
+            {/* /.row */}
+            
+          
             {/* /.row */}
             
             {/* Vietnamese Geographic Map Section */}

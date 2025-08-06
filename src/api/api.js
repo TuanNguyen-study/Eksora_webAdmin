@@ -1003,4 +1003,53 @@ export const deleteUser = async (_id) => {
     throw error;
   }
 };
+// API xóa voucher theo id
+export const deleteVoucher = async (_id) => {
+  try {
+    console.log('=== API DELETE VOUCHER ===');
+    console.log('Voucher ID:', _id);
+    console.log('ID type:', typeof _id);
+    console.log('===========================');
+    
+    if (!_id) {
+      throw new Error('Voucher ID is required');
+    }
+    
+    // Kiểm tra role trước khi xóa
+    const userRole = await getCurrentUserRole();
+    if (userRole !== 'admin') {
+      throw new Error('Chỉ có Admin mới được phép xóa voucher!');
+    }
+    
+    // Sử dụng endpoint DELETE /api/vouchers/{_id}
+    const response = await AxiosInstance.delete(`/api/vouchers/${_id}`);
+    
+    console.log('Delete voucher response:', response.data);
+    launchSuccessToast('Xóa voucher thành công!');
+    return response.data;
+  } catch (error) {
+    console.error('=== API ERROR ===');
+    console.error('Error deleting voucher:', error);
+    console.error('Error response:', error.response);
+    console.error('Error status:', error.response?.status);
+    console.error('Error data:', error.response?.data);
+    console.error('Request URL:', error.config?.url);
+    console.error('================');
+    
+    if (error.message && error.message.includes('Admin')) {
+      launchErrorToast(error.message);
+    } else if (error.response?.status === 401) {
+      launchErrorToast('Bạn không có quyền thực hiện hành động này!');
+    } else if (error.response?.status === 403) {
+      launchErrorToast('Chỉ có Admin mới được phép xóa voucher!');
+    } else if (error.response?.status === 404) {
+      launchErrorToast('Không tìm thấy voucher hoặc endpoint API không tồn tại!');
+    } else if (error.response && error.response.data) {
+      launchErrorToast('Lỗi khi xóa voucher: ' + (error.response.data.message || 'Unknown error'));
+    } else {
+      launchErrorToast('Lỗi khi xóa voucher!');
+    }
+    throw error;
+  }
+};
 

@@ -783,14 +783,14 @@ function AddTour() {
                 </div>
                 {missingFields.price && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
               </div>
-              <div className="form-group col-md-6">
+              {/* <div className="form-group col-md-6">
                 <label>Giá trẻ em</label>
                 <div className="input-group">
                   <input type="text" className="form-control bg-light" name="price_child" value={form.price_child} onChange={handleFormChange} required inputMode="numeric" pattern="[0-9.]*" />
                   <div className="input-group-append"><span className="input-group-text">VNĐ</span></div>
                 </div>
                 {missingFields.price_child && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
-              </div>
+              </div> */}
             </div>
             <div className="row">
               <div className="form-group col-md-6">
