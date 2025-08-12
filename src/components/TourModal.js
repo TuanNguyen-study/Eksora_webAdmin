@@ -46,7 +46,7 @@ function TourModal({
                   <input type="text" className="form-control bg-light" name="location" value={form.location} onChange={handleFormChange} required />
                 </div>
                 <div className="form-row">
-                  <div className="form-group col-md-4">
+                  <div className="form-group col-md-6">
                     <label><FaTag className="mr-1" />Giá vé người lớn</label>
                     <div className="input-group">
                       <input
@@ -65,26 +65,7 @@ function TourModal({
                       </div>
                     </div>
                   </div>
-                  <div className="form-group col-md-4">
-                    <label><FaTag className="mr-1" />Giá vé trẻ em</label>
-                    <div className="input-group">
-                      <input
-                        type="text"
-                        className="form-control bg-light"
-                        name="price_child"
-                        value={formatNumberVN(form.price_child)}
-                        onChange={e => {
-                          const raw = e.target.value.replace(/\D/g, '');
-                          setForm({ ...form, price_child: raw });
-                        }}
-                        required
-                      />
-                      <div className="input-group-append">
-                        <span className="input-group-text">VNĐ</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="form-group col-md-4">
+                  <div className="form-group col-md-6">
                     <label><FaTag className="mr-1" />Giá mặc định</label>
                     <div className="input-group">
                       <input

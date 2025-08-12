@@ -1,9 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTours, getCategories, getSuppliers, updateTour, deleteTour, getToursByRole, getSupplierTours, approveTour, toggleTourStatus, getCurrentUserRole, getUser, testEndpoints, debugSupplierTours } from '../api/api';
 import { FaTag, FaClock, FaList, FaMapMarkerAlt, FaImage, FaAlignLeft, FaCheckCircle } from 'react-icons/fa';
 import { uploadImageToCloudinary } from '../api/cloudinary';
 import CkeditorField from '../components/CkeditorField';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix cho default markers trong Leaflet - sử dụng CDN thay vì require
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Add custom styles for map marker
+const mapStyles = `
+  .custom-map-marker {
+    background: transparent !important;
+    border: none !important;
+  }
+  
+  .leaflet-container {
+    font-family: inherit;
+  }
+  
+  .leaflet-popup-content-wrapper {
+    border-radius: 8px;
+  }
+  
+  .leaflet-control-zoom a {
+    font-size: 18px;
+  }
+  
+  .map-search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .map-search-suggestion {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .map-search-suggestion:hover {
+    background: #f5f5f5;
+  }
+  
+  .map-search-suggestion:last-child {
+    border-bottom: none;
+  }
+`;
+
+// Inject styles
+if (!document.getElementById('tour-map-custom-styles')) {
+  const styleElement = document.createElement('style');
+  styleElement.id = 'tour-map-custom-styles';
+  styleElement.textContent = mapStyles;
+  document.head.appendChild(styleElement);
+}
 
 function Tour() {
   const navigate = useNavigate();
@@ -27,13 +94,12 @@ function Tour() {
     name: '',
     description: '',
     price: '',
-    price_child: '',
     max_tickets_per_day: '',
     image: [''],
     location: '',
     rating: '',
     cateID: { _id: '', name: '', image: '' },
-    supplier_id: { _id: '', name: '', email: '', phone: '', address: '', description: '' },
+    supplier_id: '', // Chỉ lưu ID string của supplier
     opening_time: '',
     closing_time: '',
     services: []
@@ -62,8 +128,402 @@ function Tour() {
     maxPrice: ''
   });
 
+  // Map states
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef = useRef(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState(null);
+  const [isInitializingMap, setIsInitializingMap] = useState(false);
+  
+  // Location search states  
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedCoordinates, setSelectedCoordinates] = useState(null);
+
   // Helper function để kiểm tra quyền admin
   const isAdmin = () => userRole === 'admin';
+
+  // Vietnamese location database for autocomplete
+  const vietnameseLocations = [
+    // Major cities
+    { name: 'Hà Nội', lat: 21.0285, lng: 105.8542, type: 'city' },
+    { name: 'Thành phố Hồ Chí Minh', lat: 10.8231, lng: 106.6297, type: 'city' },
+    { name: 'Đà Nẵng', lat: 16.0471, lng: 108.2068, type: 'city' },
+    { name: 'Hải Phòng', lat: 20.8449, lng: 106.6881, type: 'city' },
+    { name: 'Cần Thơ', lat: 10.0452, lng: 105.7469, type: 'city' },
+    { name: 'Nha Trang', lat: 12.2388, lng: 109.1967, type: 'city' },
+    { name: 'Huế', lat: 16.4637, lng: 107.5909, type: 'city' },
+    { name: 'Hạ Long', lat: 20.9101, lng: 107.1839, type: 'city' },
+    { name: 'Vũng Tàu', lat: 10.4113, lng: 107.1362, type: 'city' },
+    { name: 'Đà Lạt', lat: 11.9404, lng: 108.4583, type: 'city' },
+    { name: 'Quy Nhon', lat: 13.7830, lng: 109.2190, type: 'city' },
+    { name: 'Phan Thiết', lat: 10.9289, lng: 108.1022, type: 'city' },
+    { name: 'Buôn Ma Thuột', lat: 12.6667, lng: 108.0500, type: 'city' },
+    { name: 'Pleiku', lat: 13.9833, lng: 108.0000, type: 'city' },
+    { name: 'Long Xuyên', lat: 10.3833, lng: 105.4333, type: 'city' },
+    
+    // Tourist destinations
+    { name: 'Vịnh Hạ Long, Quảng Ninh', lat: 20.9101, lng: 107.1839, type: 'tourist' },
+    { name: 'Sapa, Lào Cai', lat: 22.3380, lng: 103.8442, type: 'tourist' },
+    { name: 'Hội An, Quảng Nam', lat: 15.8801, lng: 108.3380, type: 'tourist' },
+    { name: 'Mỹ Sơn, Quảng Nam', lat: 15.7649, lng: 108.1217, type: 'tourist' },
+    { name: 'Phong Nha-Kẻ Bàng, Quảng Bình', lat: 17.5083, lng: 106.2639, type: 'tourist' },
+    { name: 'Cù Lao Chàm, Quảng Nam', lat: 15.9500, lng: 108.5167, type: 'tourist' },
+    { name: 'Côn Đảo, Bà Rịa-Vũng Tàu', lat: 8.6833, lng: 106.6000, type: 'tourist' },
+    { name: 'Phú Quốc, Kiên Giang', lat: 10.2899, lng: 103.9840, type: 'tourist' },
+    { name: 'Cát Bà, Hải Phòng', lat: 20.8078, lng: 107.0611, type: 'tourist' },
+    { name: 'Tam Cốc, Ninh Bình', lat: 20.2441, lng: 105.9194, type: 'tourist' },
+    { name: 'Tràng An, Ninh Bình', lat: 20.2597, lng: 105.9011, type: 'tourist' },
+    { name: 'Bái Đính, Ninh Bình', lat: 20.2167, lng: 106.0500, type: 'tourist' },
+    { name: 'Mường Thanh, Điện Biên', lat: 21.3891, lng: 103.0197, type: 'tourist' },
+    
+    // Beaches  
+    { name: 'Bãi Dài, Phú Quốc', lat: 10.1833, lng: 103.9667, type: 'beach' },
+    { name: 'Bãi Sao, Phú Quốc', lat: 10.1167, lng: 103.9667, type: 'beach' },
+    { name: 'Mũi Né, Phan Thiết', lat: 10.9347, lng: 108.2967, type: 'beach' },
+    { name: 'Cửa Đại, Hội An', lat: 15.8667, lng: 108.3667, type: 'beach' },
+    { name: 'An Bàng, Hội An', lat: 15.8833, lng: 108.3500, type: 'beach' },
+    { name: 'Lăng Cô, Huế', lat: 16.2333, lng: 108.1167, type: 'beach' },
+    
+    // Mountains and nature
+    { name: 'Fansipan, Lào Cai', lat: 22.3019, lng: 103.7756, type: 'mountain' },
+    { name: 'Bà Nà Hills, Đà Nẵng', lat: 15.9969, lng: 107.9953, type: 'mountain' },
+    { name: 'Núi Bà Đen, Tây Ninh', lat: 11.3667, lng: 106.1000, type: 'mountain' },
+    { name: 'Đỉnh Lảng, Cao Bằng', lat: 22.6667, lng: 106.2500, type: 'mountain' },
+    
+    // Provinces
+    { name: 'An Giang', lat: 10.3883, lng: 105.1258, type: 'province' },
+    { name: 'Bà Rịa-Vũng Tàu', lat: 10.5417, lng: 107.2431, type: 'province' },
+    { name: 'Bắc Giang', lat: 21.2731, lng: 106.1946, type: 'province' },
+    { name: 'Bắc Kạn', lat: 22.1472, lng: 105.8348, type: 'province' },
+    { name: 'Bạc Liêu', lat: 9.2940, lng: 105.7215, type: 'province' },
+    { name: 'Bắc Ninh', lat: 21.1861, lng: 106.0763, type: 'province' },
+    { name: 'Bến Tre', lat: 10.2433, lng: 106.3755, type: 'province' },
+    { name: 'Bình Định', lat: 14.1665, lng: 108.9021, type: 'province' },
+    { name: 'Bình Dương', lat: 11.3254, lng: 106.4772, type: 'province' },
+    { name: 'Bình Phước', lat: 11.7512, lng: 106.7234, type: 'province' },
+    { name: 'Bình Thuận', lat: 11.0904, lng: 108.0721, type: 'province' },
+    { name: 'Cà Mau', lat: 9.1769, lng: 105.1524, type: 'province' },
+    { name: 'Cao Bằng', lat: 22.6359, lng: 106.2621, type: 'province' },
+    { name: 'Đắk Lắk', lat: 12.7100, lng: 108.2378, type: 'province' },
+    { name: 'Đắk Nông', lat: 12.2646, lng: 107.6098, type: 'province' },
+    { name: 'Điện Biên', lat: 21.8042, lng: 103.2303, type: 'province' },
+    { name: 'Đồng Nai', lat: 11.0686, lng: 107.1676, type: 'province' },
+    { name: 'Đồng Tháp', lat: 10.4938, lng: 105.6881, type: 'province' },
+    { name: 'Gia Lai', lat: 13.8078, lng: 108.1094, type: 'province' },
+    { name: 'Hà Giang', lat: 22.8025, lng: 104.9784, type: 'province' },
+    { name: 'Hà Nam', lat: 20.5835, lng: 105.9226, type: 'province' },
+    { name: 'Hà Tĩnh', lat: 18.3559, lng: 105.8877, type: 'province' },
+    { name: 'Hải Dương', lat: 20.9373, lng: 106.3147, type: 'province' },
+    { name: 'Hậu Giang', lat: 9.7781, lng: 105.6412, type: 'province' },
+    { name: 'Hòa Bình', lat: 20.6861, lng: 105.3131, type: 'province' },
+    { name: 'Hưng Yên', lat: 20.6464, lng: 106.0514, type: 'province' },
+    { name: 'Khánh Hòa', lat: 12.2585, lng: 109.0526, type: 'province' },
+    { name: 'Kiên Giang', lat: 9.8349, lng: 105.1200, type: 'province' },
+    { name: 'Kon Tum', lat: 14.3497, lng: 108.0005, type: 'province' },
+    { name: 'Lai Châu', lat: 22.3864, lng: 103.4709, type: 'province' },
+    { name: 'Lâm Đồng', lat: 11.5752, lng: 108.1429, type: 'province' },
+    { name: 'Lạng Sơn', lat: 21.8537, lng: 106.7611, type: 'province' },
+    { name: 'Lào Cai', lat: 22.4809, lng: 103.9710, type: 'province' },
+    { name: 'Long An', lat: 10.6953, lng: 106.2431, type: 'province' },
+    { name: 'Nam Định', lat: 20.4388, lng: 106.1621, type: 'province' },
+    { name: 'Nghệ An', lat: 19.2342, lng: 104.9200, type: 'province' },
+    { name: 'Ninh Bình', lat: 20.2506, lng: 105.9745, type: 'province' },
+    { name: 'Ninh Thuận', lat: 11.6739, lng: 108.8629, type: 'province' },
+    { name: 'Phú Thọ', lat: 21.2682, lng: 105.2045, type: 'province' },
+    { name: 'Phú Yên', lat: 13.1673, lng: 109.1684, type: 'province' },
+    { name: 'Quảng Bình', lat: 17.6102, lng: 106.3487, type: 'province' },
+    { name: 'Quảng Nam', lat: 15.5394, lng: 108.0191, type: 'province' },
+    { name: 'Quảng Ngãi', lat: 15.1214, lng: 108.8044, type: 'province' },
+    { name: 'Quảng Ninh', lat: 21.0064, lng: 107.2925, type: 'province' },
+    { name: 'Quảng Trị', lat: 16.7943, lng: 107.1856, type: 'province' },
+    { name: 'Sóc Trăng', lat: 9.6003, lng: 105.9800, type: 'province' },
+    { name: 'Sơn La', lat: 21.3256, lng: 103.9188, type: 'province' },
+    { name: 'Tây Ninh', lat: 11.3100, lng: 106.0998, type: 'province' },
+    { name: 'Thái Bình', lat: 20.4464, lng: 106.3364, type: 'province' },
+    { name: 'Thái Nguyên', lat: 21.5674, lng: 105.8252, type: 'province' },
+    { name: 'Thanh Hóa', lat: 19.8087, lng: 105.7764, type: 'province' },
+    { name: 'Thừa Thiên Huế', lat: 16.4674, lng: 107.5905, type: 'province' },
+    { name: 'Tiền Giang', lat: 10.4493, lng: 106.3420, type: 'province' },
+    { name: 'Trà Vinh', lat: 9.9477, lng: 106.3254, type: 'province' },
+    { name: 'Tuyên Quang', lat: 21.8237, lng: 105.2280, type: 'province' },
+    { name: 'Vĩnh Long', lat: 10.2397, lng: 105.9571, type: 'province' },
+    { name: 'Vĩnh Phúc', lat: 21.3608, lng: 105.6049, type: 'province' },
+    { name: 'Yên Bái', lat: 21.6837, lng: 104.4551, type: 'province' }
+  ];
+
+  // Initialize map function
+  const initializeMap = useCallback(() => {
+    console.log('=== TOUR MAP INITIALIZATION START ===');
+    
+    if (isInitializingMap) {
+      console.log('Map initialization already in progress, skipping...');
+      return;
+    }
+
+    if (!mapRef.current) {
+      console.log('Map container not available yet, will retry...');
+      setTimeout(() => initializeMap(), 100);
+      return;
+    }
+
+    if (mapInstanceRef.current) {
+      console.log('Map already exists, skipping initialization');
+      return;
+    }
+
+    try {
+      setIsInitializingMap(true);
+      console.log('Creating new map instance...');
+
+      const mapInstance = L.map(mapRef.current, {
+        center: [16.0583, 108.2772], // Vietnam center
+        zoom: 6,
+        zoomControl: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
+        dragging: true,
+        attributionControl: true
+      });
+
+      // Add tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(mapInstance);
+
+      mapInstanceRef.current = mapInstance;
+
+      // Handle map click for location selection
+      mapInstance.on('click', (e) => {
+        console.log('Map clicked at:', e.latlng);
+        const { lat, lng } = e.latlng;
+        
+        // Update marker position
+        if (markerRef.current) {
+          markerRef.current.setLatLng([lat, lng]);
+        } else {
+          markerRef.current = L.marker([lat, lng], {
+            draggable: true
+          }).addTo(mapInstance);
+          
+          // Handle marker drag
+          markerRef.current.on('dragend', (event) => {
+            const marker = event.target;
+            const position = marker.getLatLng();
+            console.log('Marker dragged to:', position);
+            setSelectedCoordinates({ lat: position.lat, lng: position.lng });
+            performReverseGeocoding(position.lat, position.lng);
+          });
+        }
+        
+        setSelectedCoordinates({ lat, lng });
+        performReverseGeocoding(lat, lng);
+      });
+
+      console.log('Map initialization completed successfully');
+      setMapLoaded(true);
+      setMapError(null);
+
+    } catch (error) {
+      console.error('Error initializing map:', error);
+      setMapError(error.message);
+      setMapLoaded(false);
+    } finally {
+      setIsInitializingMap(false);
+      console.log('=== TOUR MAP INITIALIZATION END ===');
+    }
+  }, [isInitializingMap]);
+
+  // Reverse geocoding function
+  const performReverseGeocoding = async (lat, lng) => {
+    console.log(`Performing reverse geocoding for: ${lat}, ${lng}`);
+    
+    const corsProxies = [
+      'https://api.codetabs.com/v1/proxy?quest=',
+      'https://api.allorigins.win/raw?url=',
+      'https://cors.sh/'
+    ];
+
+    const baseUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=vi,en`;
+
+    for (const proxy of corsProxies) {
+      try {
+        console.log(`Trying reverse geocoding with proxy: ${proxy}`);
+        const response = await fetch(`${proxy}${encodeURIComponent(baseUrl)}`, {
+          headers: {
+            'User-Agent': 'TourApp/1.0'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Reverse geocoding result:', data);
+
+        if (data && data.display_name) {
+          const locationName = data.display_name;
+          console.log('Setting location to:', locationName);
+          
+          setForm(prev => ({
+            ...prev,
+            location: locationName
+          }));
+          setLocationQuery(locationName);
+          
+          // Update marker popup
+          if (markerRef.current) {
+            markerRef.current.bindPopup(`<b>Vị trí đã chọn:</b><br>${locationName}`).openPopup();
+          }
+          
+          return;
+        }
+      } catch (error) {
+        console.log(`Reverse geocoding failed with ${proxy}:`, error.message);
+      }
+    }
+
+    console.log('All reverse geocoding attempts failed, using coordinates');
+    const fallbackLocation = `Tọa độ: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    setForm(prev => ({
+      ...prev,
+      location: fallbackLocation
+    }));
+    setLocationQuery(fallbackLocation);
+  };
+
+  // Location search function
+  const handleLocationSearch = async (query) => {
+    if (!query || query.length < 2) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    console.log(`Searching for location: "${query}"`);
+    setIsSearching(true);
+
+    try {
+      // First, search in Vietnamese locations database
+      const localResults = vietnameseLocations.filter(location => 
+        location.name.toLowerCase().includes(query.toLowerCase()) ||
+        location.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(
+          query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        )
+      ).slice(0, 5);
+
+      console.log(`Found ${localResults.length} local results:`, localResults);
+
+      if (localResults.length > 0) {
+        setLocationSuggestions(localResults.map(loc => ({
+          display_name: loc.name,
+          lat: loc.lat,
+          lng: loc.lng,
+          type: 'local'
+        })));
+        setShowSuggestions(true);
+        setIsSearching(false);
+        return;
+      }
+
+      // If no local results, try online search with CORS proxies
+      const corsProxies = [
+        'https://api.codetabs.com/v1/proxy?quest=',
+        'https://api.allorigins.win/raw?url=',
+        'https://cors.sh/'
+      ];
+
+      const searchUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=vi,en&countrycodes=vn`;
+
+      for (const proxy of corsProxies) {
+        try {
+          console.log(`Trying online search with proxy: ${proxy}`);
+          
+          const response = await fetch(`${proxy}${encodeURIComponent(searchUrl)}`, {
+            headers: {
+              'User-Agent': 'TourApp/1.0'
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log(`Online search results:`, data);
+
+          if (data && Array.isArray(data) && data.length > 0) {
+            const suggestions = data.map(item => ({
+              display_name: item.display_name,
+              lat: parseFloat(item.lat),
+              lng: parseFloat(item.lon),
+              type: 'online'
+            }));
+
+            setLocationSuggestions(suggestions);
+            setShowSuggestions(true);
+            setIsSearching(false);
+            return;
+          }
+        } catch (error) {
+          console.log(`Online search failed with ${proxy}:`, error.message);
+        }
+      }
+
+      console.log('All search attempts failed');
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+
+    } catch (error) {
+      console.error('Location search error:', error);
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Handle location selection
+  const selectLocation = (suggestion) => {
+    console.log('Selected location:', suggestion);
+    
+    setLocationQuery(suggestion.display_name);
+    setForm(prev => ({
+      ...prev,
+      location: suggestion.display_name
+    }));
+    setSelectedCoordinates({ lat: suggestion.lat, lng: suggestion.lng });
+    setShowSuggestions(false);
+
+    // Update map if available
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([suggestion.lat, suggestion.lng], 15);
+      
+      // Update or create marker
+      if (markerRef.current) {
+        markerRef.current.setLatLng([suggestion.lat, suggestion.lng]);
+      } else {
+        markerRef.current = L.marker([suggestion.lat, suggestion.lng], {
+          draggable: true
+        }).addTo(mapInstanceRef.current);
+        
+        markerRef.current.on('dragend', (event) => {
+          const marker = event.target;
+          const position = marker.getLatLng();
+          console.log('Marker dragged to:', position);
+          setSelectedCoordinates({ lat: position.lat, lng: position.lng });
+          performReverseGeocoding(position.lat, position.lng);
+        });
+      }
+      
+      markerRef.current.bindPopup(`<b>Vị trí đã chọn:</b><br>${suggestion.display_name}`).openPopup();
+    }
+  };
 
   useEffect(() => {
     async function fetchTours() {
@@ -198,12 +658,28 @@ function Tour() {
     getCategories().then(setCategories).catch(() => setCategories([]));
     // Lấy nhà cung cấp
     getSuppliers().then(data => {
-      console.log('Suppliers data:', data);
+      console.log('=== SUPPLIERS LOADED IN TOUR.JS ===');
+      console.log('Suppliers data from API:', data);
       console.log('Suppliers count:', data?.length);
       
       // Kiểm tra và loại bỏ duplicate IDs
       const supplierArray = Array.isArray(data) ? data : [];
-      const ids = supplierArray.map(s => s._id);
+      console.log('Supplier array length:', supplierArray.length);
+      
+      // Debug mỗi supplier
+      supplierArray.forEach((supplier, index) => {
+        console.log(`Supplier ${index + 1}:`, {
+          _id: supplier._id,
+          id: supplier.id, 
+          email: supplier.email,
+          first_name: supplier.first_name,
+          last_name: supplier.last_name,
+          name: supplier.name,
+          role: supplier.role
+        });
+      });
+      
+      const ids = supplierArray.map(s => s._id || s.id);
       const uniqueIds = [...new Set(ids)];
       
       if (ids.length !== uniqueIds.length) {
@@ -212,7 +688,7 @@ function Tour() {
         
         // Lọc suppliers unique theo _id, giữ supplier đầu tiên cho mỗi ID
         const uniqueSuppliers = supplierArray.filter((supplier, index, self) => 
-          index === self.findIndex(s => s._id === supplier._id)
+          index === self.findIndex(s => (s._id || s.id) === (supplier._id || supplier.id))
         );
         
         console.log('Original suppliers count:', supplierArray.length);
@@ -222,11 +698,61 @@ function Tour() {
         console.log('No duplicate supplier IDs found');
         setSuppliers(supplierArray);
       }
+      console.log('===================================');
     }).catch(error => {
+      console.error('=== ERROR LOADING SUPPLIERS IN TOUR.JS ===');
       console.error('Error loading suppliers:', error);
+      console.error('==========================================');
       setSuppliers([]);
     });
   }, [selectedCategory, selectedMonth, selectedYear, priceRange, tourFilter, selectedProvince, selectedCategoryForProvince, priceFilter]);
+
+  // Initialize map when edit modal opens
+  useEffect(() => {
+    if (showModal && modalType === 'edit') {
+      console.log('Edit modal opened, initializing map...');
+      // Delay to ensure DOM is ready
+      setTimeout(() => {
+        initializeMap();
+      }, 300);
+    }
+
+    // Cleanup when modal closes
+    if (!showModal && mapInstanceRef.current) {
+      console.log('Modal closed, cleaning up map...');
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+      markerRef.current = null;
+      setMapLoaded(false);
+      setMapError(null);
+      setIsInitializingMap(false);
+    }
+  }, [showModal, modalType, initializeMap]);
+
+  // Handle location query changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (locationQuery && showModal && modalType === 'edit') {
+        handleLocationSearch(locationQuery);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [locationQuery, showModal, modalType]);
+
+  // Handle click outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.position-relative')) {
+        setShowSuggestions(false);
+      }
+    };
+
+    if (showSuggestions) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showSuggestions]);
 
   const handleView = (tour) => {
     setSelectedTour(tour);
@@ -241,17 +767,64 @@ function Tour() {
     console.log('Tour ID type:', typeof tour._id);
     console.log('Tour cateID:', tour.cateID);
     console.log('Tour cateID type:', typeof tour.cateID);
+    console.log('Tour supplier_id:', tour.supplier_id);
+    console.log('Tour supplier_id type:', typeof tour.supplier_id);
+    console.log('Tour location:', tour.location);
     console.log('=======================');
     
+    // Extract supplier ID - chỉ lưu ID string, không lưu object
+    let supplierIdValue = '';
+    if (tour.supplier_id && typeof tour.supplier_id === 'object') {
+      supplierIdValue = tour.supplier_id._id || tour.supplier_id.id || '';
+      console.log('Extracted supplier ID from object:', supplierIdValue);
+    } else if (tour.supplier_id && typeof tour.supplier_id === 'string') {
+      supplierIdValue = tour.supplier_id;
+      console.log('Using supplier ID string:', supplierIdValue);
+    }
+    
+    console.log('Final supplier_id value for form:', supplierIdValue);
+    
     setSelectedTour(tour);
-    setForm({ 
-      ...tour, 
+    
+    // Reset form hoàn toàn trước khi set dữ liệu mới
+    const newForm = { 
+      name: tour.name || '',
+      description: tour.description || '',
+      price: tour.price || '',
+      max_tickets_per_day: tour.max_tickets_per_day || 1,
+      image: tour.image || [],
+      location: tour.location || '',
+      opening_time: tour.opening_time || '',
+      closing_time: tour.closing_time || '',
       cateID: tour.cateID || { _id: '', name: '', image: '' },
-      supplier_id: tour.supplier_id || { _id: '', name: '', email: '', phone: '', address: '', description: '' },
+      supplier_id: supplierIdValue, // Chỉ lưu ID string
       services: tour.services || []
-    });
+    };
+    
+    console.log('=== FORM RESET DEBUG ===');
+    console.log('New form object:', newForm);
+    console.log('New form supplier_id:', newForm.supplier_id);
+    console.log('========================');
+    
+    setForm(newForm);
+    
+    // Set location query for map search
+    setLocationQuery(tour.location || '');
+    setShowSuggestions(false);
+    setSelectedCoordinates(null);
+    
+    // Reset map states
+    setMapLoaded(false);
+    setMapError(null);
+    setIsInitializingMap(false);
+    
     setModalType('edit');
     setShowModal(true);
+    
+    console.log('=== MODAL OPENED DEBUG ===');
+    console.log('Modal type:', 'edit');
+    console.log('Show modal:', true);
+    console.log('==========================');
   };
 
   const handleDelete = async (id) => {
@@ -369,10 +942,24 @@ function Tour() {
         const selectedCategory = categories.find(cat => cat.name === value);
         setForm({ ...form, cateID: selectedCategory || { _id: '', name: value } });
       } else if (name === 'supplier_id') {
-        // Tìm supplier object từ danh sách
-        const selectedSupplier = suppliers.find(sup => sup._id === value);
-        setForm({ ...form, supplier_id: selectedSupplier || { _id: value } });
-      } else if (name === 'price' || name === 'price_child') {
+        console.log('=== SUPPLIER SELECTION DEBUG ===');
+        console.log('Selected supplier ID:', value);
+        console.log('Available suppliers:', suppliers);
+        console.log('Current form before change:', form);
+        
+        // Tìm supplier object từ danh sách để debug, nhưng chỉ lưu ID
+        const selectedSupplier = suppliers.find(sup => (sup._id === value) || (sup.id === value));
+        
+        console.log('Found supplier:', selectedSupplier);
+        console.log('Will save supplier_id as:', value);
+        
+        // Chỉ lưu ID string của supplier, không lưu object
+        const newForm = { ...form, supplier_id: value };
+        console.log('New form after supplier change:', newForm);
+        console.log('===============================');
+        
+        setForm(newForm);
+      } else if (name === 'price') {
         // Handle price formatting
         const raw = value.replace(/\D/g, '');
         const formatted = formatNumberVN(raw);
@@ -422,16 +1009,27 @@ function Tour() {
         
         console.log('Tour exists in current list:', !!tourExists);
         
+        // Find the selected supplier object from suppliers list
+        const selectedSupplierObject = suppliers.find(sup => 
+          (sup.id && sup.id === form.supplier_id) || 
+          (sup._id && sup._id === form.supplier_id)
+        );
+        
+        console.log('=== SUPPLIER OBJECT PREPARATION ===');
+        console.log('Form supplier_id:', form.supplier_id);
+        console.log('Found supplier object:', selectedSupplierObject);
+        console.log('Suppliers available:', suppliers.length);
+        console.log('====================================');
+        
         // Prepare data for update - match exact API format
         const updateData = {
           name: form.name,
           description: form.description,
           price: typeof form.price === 'string' ? Number(form.price.replace(/\./g, '')) : Number(form.price),
-          price_child: typeof form.price_child === 'string' ? Number(form.price_child.replace(/\./g, '')) : Number(form.price_child),
           max_tickets_per_day: Number(form.max_tickets_per_day) || 1,
           image: Array.isArray(form.image) ? form.image : [form.image || ''],
           cateID: form.cateID?._id || null,
-          supplier_id: form.supplier_id?._id || null,
+          supplier_id: form.supplier_id || null, // Send string ID to backend
           location: form.location,
           opening_time: form.opening_time,
           closing_time: form.closing_time,
@@ -446,7 +1044,13 @@ function Tour() {
           }))
         };
         
+        console.log('=== FINAL FORM DATA DEBUG ===');
+        console.log('Current form object:', form);
+        console.log('Form supplier_id value:', form.supplier_id);
+        console.log('Form supplier_id type:', typeof form.supplier_id);
+        console.log('UpdateData supplier_id:', updateData.supplier_id);
         console.log('Data being sent to API:', updateData);
+        console.log('=============================');
         console.log('Form cateID object:', form.cateID);
         console.log('Original tour cateID:', selectedTour.cateID);
         console.log('Tour ID being sent:', selectedTour._id);
@@ -456,8 +1060,8 @@ function Tour() {
         const updated = await updateTour(selectedTour._id, updateData);
         
         console.log('API Response:', updated);
-        console.log('API Response cateID type:', typeof updated.cateID);
-        console.log('API Response cateID value:', updated.cateID);
+        console.log('API Response supplier_id:', updated.supplier_id);
+        console.log('API Response supplier_id type:', typeof updated.supplier_id);
         
         // Ensure we have complete data structure, merge with current form data if needed
         const updatedTour = {
@@ -467,11 +1071,19 @@ function Tour() {
           _id: selectedTour._id,  // Preserve ID
           // Preserve populated fields that might not be returned by API
           cateID: updated.cateID && typeof updated.cateID === 'object' ? updated.cateID : selectedTour.cateID,
-          supplier_id: updated.supplier_id && typeof updated.supplier_id === 'object' ? updated.supplier_id : selectedTour.supplier_id
+          // IMPORTANT: Store the complete supplier object for display purposes
+          supplier_id: selectedSupplierObject || updated.supplier_id || selectedTour.supplier_id
         };
         
+        console.log('=== UPDATED TOUR PROCESSING ===');
+        console.log('Selected supplier object to store:', selectedSupplierObject);
+        console.log('Final supplier_id in updatedTour:', updatedTour.supplier_id);
+        console.log('Final supplier_id type:', typeof updatedTour.supplier_id);
+        console.log('Form data supplier_id:', updateData.supplier_id);
+        console.log('Final supplier_id used:', updatedTour.supplier_id);
         console.log('Final updated tour object:', updatedTour);
         console.log('Final cateID:', updatedTour.cateID);
+        console.log('===============================');
         
         // Update both tours list and selectedTour
         setTours(tours.map(t => t._id === selectedTour._id ? updatedTour : t));
@@ -771,11 +1383,12 @@ function Tour() {
                               </tr>
                             </thead>
                             <tbody>
-                              {console.log('=== RENDERING TBODY ===') || 
+                              {/* Debug logs commented for performance
+                               console.log('=== RENDERING TBODY ===') || 
                                console.log('pagedTours for render:', pagedTours) || 
                                console.log('selectedProvince:', selectedProvince) || 
                                console.log('selectedCategory:', selectedCategory) || 
-                               ''}
+                               '' */}
                               {pagedTours.length === 0 && (
                                 <tr>
                                   <td colSpan="8" className="text-center text-muted">
@@ -791,14 +1404,6 @@ function Tour() {
                                     <td>{tour.location}</td>
                                     <td>
                                       {Number(tour.price).toLocaleString('vi-VN')}VNĐ
-                                      {typeof tour.price_child !== 'undefined' &&
-                                        <>
-                                          <br/>
-                                          <span style={{ color: '#888', fontSize: 13 }}>
-                                            {Number(tour.price_child).toLocaleString('vi-VN')}VNĐ (trẻ em)
-                                          </span>
-                                        </>
-                                      }
                                     </td>
                                     <td>
                                       {(tour.opening_time || tour.open_time || 'N/A') + ' - ' + (tour.closing_time || tour.close_time || 'N/A')}
@@ -817,13 +1422,114 @@ function Tour() {
                                       </span>
                                     </td>
                                     {isAdmin() && (
-                                      <td>{tour.supplier_id?.name || 'N/A'}</td>
+                                      <td>
+                                        {(() => {
+                                          // Debug supplier data (commented for performance)
+                                          // console.log('=== SUPPLIER DEBUG FOR TOUR ===');
+                                          // console.log('Tour ID:', tour._id);
+                                          // console.log('Tour Name:', tour.name);
+                                          // console.log('Supplier ID raw:', tour.supplier_id);
+                                          
+                                          // Check for null or undefined first - FIXED CONDITION
+                                          if (!tour.supplier_id) {
+                                            return (
+                                              <div className="text-muted">
+                                                <i className="fas fa-exclamation-triangle mr-1"></i>
+                                                Chưa có nhà cung cấp
+                                              </div>
+                                            );
+                                          }
+                                          
+                                          // If supplier_id is just an ID string (not populated), tìm từ suppliers list
+                                          if (typeof tour.supplier_id === 'string') {
+                                            console.log('Searching for supplier ID:', tour.supplier_id);
+                                            console.log('Available suppliers:', suppliers);
+                                            
+                                            // Tìm supplier từ danh sách đã load (ưu tiên field 'id' trước, sau đó '_id')
+                                            const foundSupplier = suppliers.find(sup => sup.id === tour.supplier_id) ||
+                                                                suppliers.find(sup => sup._id === tour.supplier_id);
+                                            
+                                            console.log('Found supplier by ID lookup:', foundSupplier);
+                                            
+                                            if (foundSupplier) {
+                                              // Ưu tiên fullName, sau đó ghép first_name + last_name, cuối cùng là name
+                                              const supplierName = foundSupplier.fullName || 
+                                                                  `${foundSupplier.first_name || ''} ${foundSupplier.last_name || ''}`.trim() || 
+                                                                  foundSupplier.name || 'Tên không xác định';
+                                              
+                                              return (
+                                                <div>
+                                                  <div className="font-weight-bold text-success">
+                                                    {supplierName}
+                                                  </div>
+                                                  {foundSupplier.email && (
+                                                    <small className="text-muted">
+                                                      <i className="fas fa-envelope mr-1"></i>
+                                                      {foundSupplier.email}
+                                                    </small>
+                                                  )}
+                                                  {foundSupplier.phone && (
+                                                    <small className="text-muted d-block">
+                                                      <i className="fas fa-phone mr-1"></i>
+                                                      {foundSupplier.phone}
+                                                    </small>
+                                                  )}
+                                                </div>
+                                              );
+                                            } else {
+                                              return (
+                                                <div className="text-warning">
+                                                  <i className="fas fa-search mr-1"></i>
+                                                  ID: {tour.supplier_id}
+                                                  <br />
+                                                  <small className="text-muted">(Không tìm thấy thông tin supplier)</small>
+                                                </div>
+                                              );
+                                            }
+                                          }
+                                          
+                                          // If supplier_id is an object (populated) and not null
+                                          if (typeof tour.supplier_id === 'object' && tour.supplier_id !== null) {
+                                            // Ưu tiên fullName, sau đó ghép first_name + last_name, cuối cùng là name  
+                                            const supplierName = tour.supplier_id.fullName ||
+                                                                `${tour.supplier_id.first_name || ''} ${tour.supplier_id.last_name || ''}`.trim() || 
+                                                                tour.supplier_id.name || 'Tên không xác định';
+                                            
+                                            return (
+                                              <div>
+                                                <div className="font-weight-bold">
+                                                  {supplierName}
+                                                </div>
+                                                {tour.supplier_id.email && (
+                                                  <small className="text-muted">
+                                                    <i className="fas fa-envelope mr-1"></i>
+                                                    {tour.supplier_id.email}
+                                                  </small>
+                                                )}
+                                                {tour.supplier_id.phone && (
+                                                  <small className="text-muted d-block">
+                                                    <i className="fas fa-phone mr-1"></i>
+                                                    {tour.supplier_id.phone}
+                                                  </small>
+                                                )}
+                                              </div>
+                                            );
+                                          }
+                                          
+                                          return (
+                                            <div className="text-danger">
+                                              <i className="fas fa-bug mr-1"></i>
+                                              Lỗi dữ liệu supplier
+                                            </div>
+                                          );
+                                        })()}
+                                      </td>
                                     )}
                                     <td>
                                       <button className="btn btn-info btn-sm mr-2" onClick={() => handleView(tour)}>
                                         <i className="fas fa-eye mr-1"></i> Xem
                                       </button>
-                                      {userRole === 'supplier' && (
+                                      {(userRole === 'supplier' || isAdmin()) && (
                                         <button className="btn btn-warning btn-sm mr-2" onClick={() => handleEdit(tour)}>
                                           <i className="fas fa-edit mr-1"></i> Sửa
                                         </button>
@@ -959,9 +1665,6 @@ function Tour() {
                         <b>Giá:</b> <span className="ml-1 text-primary font-weight-bold">{Number(selectedTour.price).toLocaleString('vi-VN')} VNĐ</span>
                       </div>
                       <div className="col-md-6 mb-2">
-                        <b>Giá trẻ em:</b> <span className="ml-1 text-info font-weight-bold">{Number(selectedTour.price_child).toLocaleString('vi-VN')} VNĐ</span>
-                      </div>
-                      <div className="col-md-6 mb-2">
                         <b>Số vé tối đa/ngày:</b> <span className="ml-1">{selectedTour.max_tickets_per_day || 'N/A'} vé</span>
                       </div>
                       <div className="col-md-6 mb-2">
@@ -997,7 +1700,40 @@ function Tour() {
                       </div>
                       {isAdmin() && (
                         <div className="col-md-6 mb-2">
-                          <b>Nhà cung cấp:</b> <span className="ml-1">{selectedTour.supplier_id?.name || 'N/A'}</span>
+                          <b>Nhà cung cấp:</b> <span className="ml-1">
+                            {selectedTour.supplier_id ? (
+                              <div>
+                                <div className="font-weight-bold d-inline">
+                                  {`${selectedTour.supplier_id.first_name || ''} ${selectedTour.supplier_id.last_name || ''}`.trim() || 
+                                   selectedTour.supplier_id.name || 'Tên không xác định'}
+                                </div>
+                                {selectedTour.supplier_id.email && (
+                                  <div className="mt-1">
+                                    <small className="text-muted">
+                                      <i className="fas fa-envelope mr-1"></i>
+                                      Email: {selectedTour.supplier_id.email}
+                                    </small>
+                                  </div>
+                                )}
+                                {selectedTour.supplier_id.phone && (
+                                  <div className="mt-1">
+                                    <small className="text-muted">
+                                      <i className="fas fa-phone mr-1"></i>
+                                      Điện thoại: {selectedTour.supplier_id.phone}
+                                    </small>
+                                  </div>
+                                )}
+                                {selectedTour.supplier_id.address && (
+                                  <div className="mt-1">
+                                    <small className="text-muted">
+                                      <i className="fas fa-map-marker-alt mr-1"></i>
+                                      Địa chỉ: {selectedTour.supplier_id.address}
+                                    </small>
+                                  </div>
+                                )}
+                              </div>
+                            ) : 'N/A'}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -1078,33 +1814,107 @@ function Tour() {
                         </div>
                         <div className="form-group">
                           <label><FaMapMarkerAlt className="mr-1" />Địa điểm</label>
-                          <input type="text" className="form-control bg-light" name="location" value={form.location} onChange={handleFormChange} required />
+                          <div className="position-relative">
+                            <input 
+                              type="text" 
+                              className="form-control bg-light" 
+                              name="location" 
+                              value={locationQuery}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setLocationQuery(value);
+                                setForm(prev => ({ ...prev, location: value }));
+                              }}
+                              onFocus={() => {
+                                if (locationSuggestions.length > 0) {
+                                  setShowSuggestions(true);
+                                }
+                              }}
+                              placeholder="Nhập địa điểm hoặc click trên bản đồ..."
+                              required 
+                            />
+                            
+                            {/* Loading indicator */}
+                            {isSearching && (
+                              <div className="position-absolute" style={{ right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                                <div className="spinner-border spinner-border-sm" role="status">
+                                  <span className="sr-only">Đang tìm...</span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Search suggestions */}
+                            {showSuggestions && locationSuggestions.length > 0 && (
+                              <div className="map-search-suggestions">
+                                {locationSuggestions.map((suggestion, index) => (
+                                  <div
+                                    key={index}
+                                    className="map-search-suggestion"
+                                    onClick={() => selectLocation(suggestion)}
+                                  >
+                                    <i className="fas fa-map-marker-alt mr-2 text-primary"></i>
+                                    {suggestion.display_name}
+                                    <small className="text-muted ml-2">
+                                      ({suggestion.type === 'local' ? 'Địa điểm Việt Nam' : 'Tìm kiếm online'})
+                                    </small>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Map container */}
+                          <div className="mt-3">
+                            <div 
+                              ref={mapRef}
+                              style={{ 
+                                height: '450px', 
+                                width: '100%',
+                                border: '1px solid #ddd',
+                                borderRadius: '4px'
+                              }}
+                            >
+                              {/* Map will be initialized here */}
+                            </div>
+                            
+                            {/* Map status indicators */}
+                            {isInitializingMap && (
+                              <div className="text-center mt-2">
+                                <small className="text-muted">
+                                  <i className="fas fa-spinner fa-spin mr-1"></i>
+                                  Đang khởi tạo bản đồ...
+                                </small>
+                              </div>
+                            )}
+                            
+                            {mapError && (
+                              <div className="alert alert-warning mt-2 mb-0">
+                                <i className="fas fa-exclamation-triangle mr-1"></i>
+                                Lỗi tải bản đồ: {mapError}
+                              </div>
+                            )}
+                            
+                            {mapLoaded && !mapError && selectedCoordinates && (
+                              <div className="alert alert-info mt-2 mb-0">
+                                <i className="fas fa-check-circle mr-1"></i>
+                                Đã chọn vị trí: {selectedCoordinates.lat.toFixed(6)}, {selectedCoordinates.lng.toFixed(6)}
+                              </div>
+                            )}
+                            
+                            <small className="text-muted">
+                              Click trên bản đồ để chọn vị trí chính xác cho tour của bạn
+                            </small>
+                          </div>
                         </div>
                         <div className="form-row">
                           <div className="form-group col-md-6">
-                            <label><FaTag className="mr-1" />Giá người lớn</label>
+                            <label><FaTag className="mr-1" />Giá vé</label>
                             <div className="input-group">
                               <input
                                 type="text"
                                 className="form-control bg-light"
                                 name="price"
                                 value={formatNumberVN(form.price)}
-                                onChange={handleFormChange}
-                                required
-                              />
-                              <div className="input-group-append">
-                                <span className="input-group-text">VNĐ</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="form-group col-md-6">
-                            <label><FaTag className="mr-1" />Giá trẻ em</label>
-                            <div className="input-group">
-                              <input
-                                type="text"
-                                className="form-control bg-light"
-                                name="price_child"
-                                value={formatNumberVN(form.price_child)}
                                 onChange={handleFormChange}
                                 required
                               />
@@ -1143,6 +1953,65 @@ function Tour() {
                             ))}
                           </select>
                         </div>
+                        
+                        {/* Supplier selector - chỉ hiển thị cho admin */}
+                        {isAdmin() && (
+                          <div className="form-group">
+                            <label>
+                              <i className="fas fa-building mr-1"></i>
+                              Nhà cung cấp
+                            </label>
+                            <select 
+                              className="form-control bg-light" 
+                              name="supplier_id" 
+                              value={(() => {
+                                const currentValue = typeof form.supplier_id === 'object' ? 
+                                  (form.supplier_id._id || form.supplier_id.id || '') : 
+                                  form.supplier_id || '';
+                                console.log('=== DROPDOWN VALUE DEBUG ===');
+                                console.log('Form supplier_id:', form.supplier_id);
+                                console.log('Dropdown current value:', currentValue);
+                                console.log('============================');
+                                return currentValue;
+                              })()} 
+                              onChange={handleFormChange} 
+                              required
+                            >
+                              <option value="">-- Chọn nhà cung cấp --</option>
+                              {suppliers.map(supplier => {
+                                const supplierId = supplier.id || supplier._id; // Ưu tiên 'id' trước
+                                // Ưu tiên fullName, sau đó ghép first_name + last_name, cuối cùng là name
+                                const supplierName = supplier.fullName || 
+                                                    `${supplier.first_name || ''} ${supplier.last_name || ''}`.trim() || 
+                                                    supplier.name || 'Tên không xác định';
+                                
+                                // Debug cho option được selected
+                                const isSelected = (typeof form.supplier_id === 'object' ? 
+                                  (form.supplier_id._id || form.supplier_id.id || '') : 
+                                  form.supplier_id || '') === supplierId;
+                                
+                                if (isSelected) {
+                                  console.log('=== SELECTED SUPPLIER DEBUG ===');
+                                  console.log('Selected supplier:', supplier);
+                                  console.log('Selected supplier ID:', supplierId);
+                                  console.log('Selected supplier name:', supplierName);
+                                  console.log('Form supplier_id value:', form.supplier_id);
+                                  console.log('==============================');
+                                }
+                                
+                                return (
+                                  <option key={supplierId} value={supplierId}>
+                                    {supplierName}
+                                    {supplier.email && ` (${supplier.email})`}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                            <small className="text-muted">
+                              Chọn nhà cung cấp sở hữu tour này
+                            </small>
+                          </div>
+                        )}
                         <div className="form-row">
                           <div className="form-group col-md-6">
                             <label><i className="fas fa-clock mr-1" />Giờ mở cửa</label>
@@ -1392,6 +2261,12 @@ function Tour() {
                             Thay đổi sẽ được cập nhật ngay lập tức
                           </small>
                         )}
+                        {isAdmin() && (
+                          <small className="text-muted">
+                            <i className="fas fa-user-cog mr-1"></i>
+                            Bạn đang sửa tour với quyền Admin
+                          </small>
+                        )}
                       </div>
                     )}
                   </form>
@@ -1407,6 +2282,12 @@ function Tour() {
                     <small className="text-muted mr-auto">
                       <i className="fas fa-info-circle mr-1"></i>
                       Bạn đang chỉnh sửa tour của mình
+                    </small>
+                  )}
+                  {isAdmin() && (
+                    <small className="text-muted mr-auto">
+                      <i className="fas fa-user-shield mr-1"></i>
+                      Admin có thể chỉnh sửa mọi tour trong hệ thống
                     </small>
                   )}
                 </div>

@@ -76,11 +76,47 @@ export const getCategories = async () => {
 // API lấy danh sách các tour
 export const getTours = async () => {
   try {
-    const response = await AxiosInstance.get('/api/tours');
-    console.log( 'Lấy danh sách các tour thành công:', response.data);
+    console.log('=== GET TOURS WITH POPULATE ===');
+    
+    // Thêm query parameter để populate supplier và category data
+    const response = await AxiosInstance.get('/api/tours?populate=supplier_id,cateID');
+    console.log('Raw response from /api/tours:', response.data);
+    console.log('Tours count:', response.data?.length);
+    
+    // Debug supplier data in each tour (commented for performance)
+    /*
+    if (Array.isArray(response.data)) {
+      console.log('=== SUPPLIER DATA AUDIT IN TOURS ===');
+      response.data.forEach((tour, index) => {
+        console.log(`Tour ${index + 1}:`, {
+          tourId: tour._id,
+          name: tour.name,
+          supplier_id_raw: tour.supplier_id,
+          supplier_type: typeof tour.supplier_id,
+          supplier_is_object: tour.supplier_id && typeof tour.supplier_id === 'object',
+          supplier_keys: tour.supplier_id && typeof tour.supplier_id === 'object' ? Object.keys(tour.supplier_id) : null,
+          supplier_details: tour.supplier_id && typeof tour.supplier_id === 'object' ? {
+            id: tour.supplier_id._id || tour.supplier_id.id,
+            email: tour.supplier_id.email,
+            first_name: tour.supplier_id.first_name,
+            last_name: tour.supplier_id.last_name,
+            role: tour.supplier_id.role
+          } : 'NOT_POPULATED_OR_STRING_ID'
+        });
+      });
+      console.log('====================================');
+    }
+    */
+    
+    console.log('Lấy danh sách các tour thành công:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách các tour:', error);
+    console.error('=== ERROR GETTING TOURS ===');
+    console.error('Error:', error);
+    console.error('Error response:', error.response);
+    console.error('Error status:', error.response?.status);
+    console.error('Error message:', error.message);
+    console.error('===========================');
     throw error;
   }
 };
@@ -89,8 +125,29 @@ export const getTours = async () => {
 export const getSupplierTours = async () => {
   try {
     console.log('Getting supplier tours...');
-    const response = await AxiosInstance.get('/api/tours-by-supplier');
+    // Thêm populate để lấy đầy đủ thông tin supplier và category
+    const response = await AxiosInstance.get('/api/tours-by-supplier?populate=supplier_id,cateID');
+    console.log('=== SUPPLIER TOURS API RESPONSE ===');
     console.log('Supplier tours response:', response.data);
+    
+    if (Array.isArray(response.data)) {
+      console.log('Supplier tours count:', response.data.length);
+      response.data.forEach((tour, index) => {
+        console.log(`Supplier Tour ${index + 1}:`, {
+          name: tour.name,
+          id: tour._id,
+          supplier_id: tour.supplier_id,
+          supplier_details: tour.supplier_id ? {
+            id: tour.supplier_id._id,
+            email: tour.supplier_id.email,
+            first_name: tour.supplier_id.first_name,
+            last_name: tour.supplier_id.last_name
+          } : 'NO SUPPLIER DATA'
+        });
+      });
+    }
+    console.log('===================================');
+    
     return response.data;
   } catch (error) {
     console.error('Lỗi khi lấy tours của supplier:', error);
@@ -543,7 +600,6 @@ export const createTour = async (tourData, userRole = null) => {
     { key: 'name', label: 'Tên tour' },
     { key: 'description', label: 'Mô tả' },
     { key: 'price', label: 'Giá vé' },
-    { key: 'price_child', label: 'Giá trẻ em' },
     { key: 'max_tickets_per_day', label: 'Số lượng vé tối đa trong ngày' },
     { key: 'location', label: 'Địa điểm' },
     { key: 'cateID', label: 'Danh mục' },
@@ -567,7 +623,7 @@ export const createTour = async (tourData, userRole = null) => {
   }
   
   // Validate numeric fields
-  const numericFields = ['price', 'price_child', 'max_tickets_per_day'];
+  const numericFields = ['price', 'max_tickets_per_day'];
   for (const field of numericFields) {
     if (tourData[field] !== undefined && tourData[field] !== null) {
       const value = Number(tourData[field]);
@@ -643,7 +699,11 @@ export const updateTour = async (_id, tourData) => {
     console.log('ID type:', typeof _id);
     console.log('ID length:', _id?.length);
     console.log('Tour data:', tourData);
-    console.log('======================');
+    console.log('=== SUPPLIER_ID DEBUG ===');
+    console.log('tourData.supplier_id:', tourData.supplier_id);
+    console.log('supplier_id type:', typeof tourData.supplier_id);
+    console.log('supplier_id length:', tourData.supplier_id?.length);
+    console.log('=========================');
     
     if (!_id) {
       throw new Error('Tour ID is required');
@@ -651,14 +711,19 @@ export const updateTour = async (_id, tourData) => {
     
     // Kiểm tra role trước khi cập nhật
     const userRole = await getCurrentUserRole();
-    if (userRole !== 'supplier') {
-      throw new Error('Chỉ có Supplier mới được phép sửa tour!');
+    if (userRole !== 'supplier' && userRole !== 'admin') {
+      throw new Error('Chỉ có Admin hoặc Supplier mới được phép sửa tour!');
     }
     
     // Sử dụng endpoint cố định /api/update-tours/{_id}
     const response = await AxiosInstance.put(`/api/update-tours/${_id}`, tourData);
     
-    console.log('Update response:', response.data);
+    console.log('=== UPDATE RESPONSE DEBUG ===');
+    console.log('Full response:', response.data);
+    console.log('Response tour:', response.data?.tour);
+    console.log('Response supplier_id:', response.data?.tour?.supplier_id);
+    console.log('Response supplier_id type:', typeof response.data?.tour?.supplier_id);
+    console.log('=============================');
     launchSuccessToast('Cập nhật tour thành công!');
     return response.data;
   } catch (error) {
@@ -670,7 +735,7 @@ export const updateTour = async (_id, tourData) => {
     console.error('Request URL:', error.config?.url);
     console.error('================');
     
-    if (error.message && error.message.includes('Supplier')) {
+    if (error.message && (error.message.includes('Supplier') || error.message.includes('Admin'))) {
       launchErrorToast(error.message);
     } else if (error.response?.status === 404) {
       launchErrorToast('Không tìm thấy tour hoặc endpoint API không tồn tại!');
@@ -877,20 +942,37 @@ export const toggleTourStatus = async (_id, isActive = true) => {
 // API lấy danh sách đối tác (suppliers)
 export const getSuppliers = async () => {
   try {
-    console.log('Getting suppliers from /api/all endpoint...');
+    console.log('=== GET SUPPLIERS FROM /api/all ===');
+    console.log('Getting all users and filtering suppliers...');
+    
     const response = await AxiosInstance.get('/api/all');
+    console.log('Total users count:', response.data?.length);
     
     // Filter users with role 'supplier'
     const allUsers = response.data;
     const suppliers = allUsers.filter(user => user.role === 'supplier');
     
+    console.log('=== SUPPLIER FILTERING RESULTS ===');
     console.log('All users count:', allUsers?.length);
     console.log('Suppliers found:', suppliers?.length);
-    console.log('Suppliers data:', suppliers);
+    console.log('===================================');
     
-    return suppliers;
+    // Đảm bảo mỗi supplier có _id field
+    const normalizedSuppliers = suppliers.map(supplier => ({
+      ...supplier,
+      _id: supplier._id || supplier.id, // Đảm bảo có _id field
+      id: supplier._id || supplier.id   // Đảm bảo có id field
+    }));
+    
+    console.log('Normalized suppliers returned:', normalizedSuppliers.length);
+    return normalizedSuppliers;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách suppliers:', error);
+    console.error('=== ERROR GETTING SUPPLIERS ===');
+    console.error('Error:', error);
+    console.error('Error response:', error.response);
+    console.error('Error status:', error.response?.status);
+    console.error('Error data:', error.response?.data);
+    console.error('===============================');
     throw error;
   }
 };
@@ -1049,6 +1131,175 @@ export const deleteVoucher = async (_id) => {
     } else {
       launchErrorToast('Lỗi khi xóa voucher!');
     }
+    throw error;
+  }
+};
+
+// API tạo voucher mới cho tour
+export const createVoucher = async (voucherData) => {
+  try {
+    console.log('=== API CREATE VOUCHER ===');
+    console.log('Voucher data:', voucherData);
+    console.log('===========================');
+    
+    // Validate required fields
+    const requiredFields = [
+      { key: 'tour_id', label: 'Tour ID' },
+      { key: 'code', label: 'Mã voucher' },
+      { key: 'discount', label: 'Phần trăm giảm giá' },
+      { key: 'condition', label: 'Điều kiện áp dụng' },
+      { key: 'start_date', label: 'Ngày bắt đầu' },
+      { key: 'end_date', label: 'Ngày kết thúc' }
+    ];
+    
+    for (const field of requiredFields) {
+      if (!voucherData[field.key] || 
+          (typeof voucherData[field.key] === 'string' && !voucherData[field.key].trim())) {
+        console.error(`Missing field: ${field.label}`, voucherData[field.key]);
+        launchErrorToast(`Trường bắt buộc bị thiếu: ${field.label}`);
+        throw new Error(`Trường bắt buộc bị thiếu: ${field.label}`);
+      }
+    }
+    
+    // Validate discount is a valid number between 1-100
+    const discount = Number(voucherData.discount);
+    if (isNaN(discount) || discount <= 0 || discount > 100) {
+      console.error('Invalid discount value:', voucherData.discount);
+      launchErrorToast('Phần trăm giảm giá phải là số từ 1 đến 100');
+      throw new Error('Phần trăm giảm giá phải là số từ 1 đến 100');
+    }
+    
+    // Validate dates
+    const startDate = new Date(voucherData.start_date);
+    const endDate = new Date(voucherData.end_date);
+    const currentDate = new Date();
+    
+    if (startDate >= endDate) {
+      launchErrorToast('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+      throw new Error('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+    }
+    
+    if (endDate <= currentDate) {
+      launchErrorToast('Ngày kết thúc phải lớn hơn ngày hiện tại');
+      throw new Error('Ngày kết thúc phải lớn hơn ngày hiện tại');
+    }
+    
+    // Kiểm tra role trước khi tạo
+    const userRole = await getCurrentUserRole();
+    if (userRole !== 'admin') {
+      throw new Error('Chỉ có Admin mới được phép tạo voucher!');
+    }
+    
+    // Prepare data to send
+    const dataToSend = {
+      tour_id: voucherData.tour_id,
+      code: voucherData.code.toUpperCase().trim(),
+      discount: discount,
+      condition: voucherData.condition.trim(),
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString()
+    };
+    
+    console.log('Data to send:', dataToSend);
+    
+    // Sử dụng endpoint POST /api/vouchers
+    const response = await AxiosInstance.post('/api/vouchers', dataToSend);
+    
+    console.log('Create voucher response:', response.data);
+    launchSuccessToast('Tạo voucher thành công!');
+    return response.data;
+  } catch (error) {
+    console.error('=== API ERROR ===');
+    console.error('Error creating voucher:', error);
+    console.error('Error response:', error.response);
+    console.error('Error status:', error.response?.status);
+    console.error('Error data:', error.response?.data);
+    console.error('Request URL:', error.config?.url);
+    console.error('================');
+    
+    if (error.message && error.message.includes('Admin')) {
+      launchErrorToast(error.message);
+    } else if (error.message && (error.message.includes('Trường bắt buộc') || 
+                                error.message.includes('Phần trăm giảm giá') ||
+                                error.message.includes('Ngày'))) {
+      // Error message already shown by validation
+    } else if (error.response?.status === 401) {
+      launchErrorToast('Bạn không có quyền thực hiện hành động này!');
+    } else if (error.response?.status === 403) {
+      launchErrorToast('Chỉ có Admin mới được phép tạo voucher!');
+    } else if (error.response?.status === 409) {
+      launchErrorToast('Mã voucher đã tồn tại. Vui lòng chọn mã khác!');
+    } else if (error.response?.status === 404) {
+      launchErrorToast('Tour không tồn tại!');
+    } else if (error.response && error.response.data) {
+      launchErrorToast('Lỗi khi tạo voucher: ' + (error.response.data.message || 'Unknown error'));
+    } else {
+      launchErrorToast('Lỗi khi tạo voucher!');
+    }
+    throw error;
+  }
+};
+
+// API thay đổi trạng thái voucher (Active/Deactive) - chỉ dành cho admin
+export const toggleVoucherStatus = async (_id, isActive = true) => {
+  try {
+    console.log('=== API TOGGLE VOUCHER STATUS ===');
+    console.log('Voucher ID:', _id);
+    console.log('Is Active:', isActive);
+    console.log('=================================');
+    
+    if (!_id) {
+      throw new Error('Voucher ID is required');
+    }
+    
+    // Kiểm tra role trước khi thay đổi trạng thái
+    const userRole = await getCurrentUserRole();
+    if (userRole !== 'admin') {
+      throw new Error('Chỉ có Admin mới được phép thay đổi trạng thái voucher!');
+    }
+    
+    // Sử dụng endpoint PUT /api/vouchers/voucher/status/{_id}
+    const status = isActive ? 'active' : 'deactive';
+    console.log('Sending status:', status);
+    
+    const response = await AxiosInstance.put(`/api/vouchers/voucher/status/${_id}`, { 
+      status: status
+    });
+    
+    console.log('Toggle voucher status response:', response.data);
+    
+    // Toast success message
+    const successMessage = isActive ? 'Kích hoạt voucher thành công!' : 'Hủy kích hoạt voucher thành công!';
+    console.log('Showing success toast:', successMessage);
+    launchSuccessToast(successMessage);
+    
+    return response.data;
+  } catch (error) {
+    console.error('=== API ERROR ===');
+    console.error('Error toggling voucher status:', error);
+    console.error('Error response:', error.response);
+    console.error('Error status:', error.response?.status);
+    console.error('Error data:', error.response?.data);
+    console.error('================');
+    
+    // Xử lý và hiển thị toast error messages
+    let errorMessage = 'Lỗi khi thay đổi trạng thái voucher!';
+    
+    if (error.message && error.message.includes('Admin')) {
+      errorMessage = error.message;
+    } else if (error.response?.status === 401) {
+      errorMessage = 'Bạn không có quyền thực hiện hành động này!';
+    } else if (error.response?.status === 403) {
+      errorMessage = 'Chỉ có Admin mới được phép thay đổi trạng thái voucher!';
+    } else if (error.response?.status === 404) {
+      errorMessage = 'Không tìm thấy voucher hoặc endpoint API không tồn tại!';
+    } else if (error.response && error.response.data && error.response.data.message) {
+      errorMessage = 'Lỗi khi thay đổi trạng thái voucher: ' + error.response.data.message;
+    }
+    
+    console.log('Showing error toast:', errorMessage);
+    launchErrorToast(errorMessage);
+    
     throw error;
   }
 };
