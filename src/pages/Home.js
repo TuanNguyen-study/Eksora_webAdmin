@@ -24,6 +24,11 @@ function Home() {
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalSuppliers, setTotalSuppliers] = useState(0);
   
+  // New state for month-over-month growth metrics
+  const [revenueGrowth, setRevenueGrowth] = useState(0);
+  const [bookingGrowth, setBookingGrowth] = useState(0);
+  const [userGrowth, setUserGrowth] = useState(0);
+  
   // New state for hot destinations and map data
   const [hotDestinations, setHotDestinations] = useState([]);
   const [categoryBookingData, setCategoryBookingData] = useState([]);
@@ -248,6 +253,85 @@ function Home() {
     setTotalRevenue(totalRevenue);
     setChartLoading(false);
   }, [selectedMonth, selectedYear, allBookings]);
+
+  // Calculate month-over-month growth metrics
+  useEffect(() => {
+    if (allBookings.length > 0) {
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth();
+      const currentYear = currentDate.getFullYear();
+      
+      // Previous month
+      const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      
+      // Calculate current month metrics
+      const currentMonthBookings = allBookings.filter(booking => {
+        const bookingDate = new Date(booking.createdAt);
+        return bookingDate.getMonth() === currentMonth && bookingDate.getFullYear() === currentYear;
+      });
+      
+      const currentMonthRevenue = currentMonthBookings
+        .filter(b => ["paid", "completed", "refunded"].includes(b.status))
+        .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+      
+      // Calculate previous month metrics
+      const prevMonthBookings = allBookings.filter(booking => {
+        const bookingDate = new Date(booking.createdAt);
+        return bookingDate.getMonth() === prevMonth && bookingDate.getFullYear() === prevYear;
+      });
+      
+      const prevMonthRevenue = prevMonthBookings
+        .filter(b => ["paid", "completed", "refunded"].includes(b.status))
+        .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+      
+      // Calculate growth percentages
+      const revenueGrowthPercent = prevMonthRevenue === 0 ? 100 : 
+        ((currentMonthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100;
+      
+      const bookingGrowthPercent = prevMonthBookings.length === 0 ? 100 : 
+        ((currentMonthBookings.length - prevMonthBookings.length) / prevMonthBookings.length) * 100;
+      
+      setRevenueGrowth(Math.round(revenueGrowthPercent));
+      setBookingGrowth(Math.round(bookingGrowthPercent));
+    }
+  }, [allBookings]);
+
+  // Calculate user growth month-over-month
+  useEffect(() => {
+    async function calculateUserGrowth() {
+      try {
+        const data = await getAllUsers();
+        const currentDate = new Date();
+        const currentMonth = currentDate.getMonth();
+        const currentYear = currentDate.getFullYear();
+        
+        // Previous month
+        const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        
+        const regularUsers = data.filter(u => u.role === 'user' || !u.role);
+        
+        const currentMonthUsers = regularUsers.filter(user => {
+          const userDate = new Date(user.createdAt);
+          return userDate.getMonth() === currentMonth && userDate.getFullYear() === currentYear;
+        });
+        
+        const prevMonthUsers = regularUsers.filter(user => {
+          const userDate = new Date(user.createdAt);
+          return userDate.getMonth() === prevMonth && userDate.getFullYear() === prevYear;
+        });
+        
+        const userGrowthPercent = prevMonthUsers.length === 0 ? 100 : 
+          ((currentMonthUsers.length - prevMonthUsers.length) / prevMonthUsers.length) * 100;
+        
+        setUserGrowth(Math.round(userGrowthPercent));
+      } catch (err) {
+        setUserGrowth(0);
+      }
+    }
+    calculateUserGrowth();
+  }, []);
 
   // useEffect for top reviews of the month
 
@@ -662,36 +746,44 @@ function Home() {
                     <div className="row">
                       <div className="col-sm-3 col-6">
                         <div className="description-block border-right">
-                          <span className="description-percentage text-success"><i className="fas fa-caret-up" /> 17%</span>
+                          <span className={`description-percentage ${revenueGrowth >= 0 ? 'text-success' : 'text-danger'}`}>
+                            <i className={`fas fa-caret-${revenueGrowth >= 0 ? 'up' : 'down'}`} /> {Math.abs(revenueGrowth)}%
+                          </span>
                           <h5 className="description-header">{monthlyBookingStats.revenueCounts ? monthlyBookingStats.revenueCounts.reduce((a, b) => a + b, 0).toLocaleString('vi-VN') : 0} đ</h5>
-                          <span className="description-text">TỔNG DOANH THU THÁNG NÀY</span>
+                          <span className="description-text">DOANH THU SO VỚI THÁNG TRƯỚC</span>
                         </div>
                         {/* /.description-block */}
                       </div>
                       {/* /.col */}
                       <div className="col-sm-3 col-6">
                         <div className="description-block border-right">
-                          <span className="description-percentage text-warning"><i className="fas fa-caret-left" /> 0%</span>
-                          <h5 className="description-header">$10,390.90</h5>
-                          <span className="description-text">TOTAL COST</span>
+                          <span className={`description-percentage ${revenueGrowth >= 0 ? 'text-success' : 'text-danger'}`}>
+                            <i className={`fas fa-caret-${revenueGrowth >= 0 ? 'up' : 'down'}`} /> {Math.abs(revenueGrowth)}%
+                          </span>
+                          <h5 className="description-header">{revenueGrowth >= 0 ? '+' : '-'}{Math.abs(revenueGrowth)}%</h5>
+                          <span className="description-text">MỨC TĂNG TRƯỞNG DOANH THU</span>
                         </div>
                         {/* /.description-block */}
                       </div>
                       {/* /.col */}
                       <div className="col-sm-3 col-6">
                         <div className="description-block border-right">
-                          <span className="description-percentage text-success"><i className="fas fa-caret-up" /> 20%</span>
-                          <h5 className="description-header">$24,813.53</h5>
-                          <span className="description-text">TOTAL PROFIT</span>
+                          <span className={`description-percentage ${userGrowth >= 0 ? 'text-success' : 'text-danger'}`}>
+                            <i className={`fas fa-caret-${userGrowth >= 0 ? 'up' : 'down'}`} /> {Math.abs(userGrowth)}%
+                          </span>
+                          <h5 className="description-header">{newMembersCount}</h5>
+                          <span className="description-text">THÀNH VIÊN SO VỚI THÁNG TRƯỚC</span>
                         </div>
                         {/* /.description-block */}
                       </div>
                       {/* /.col */}
                       <div className="col-sm-3 col-6">
                         <div className="description-block">
-                          <span className="description-percentage text-danger"><i className="fas fa-caret-down" /> 18%</span>
-                          <h5 className="description-header">1200</h5>
-                          <span className="description-text">GOAL COMPLETIONS</span>
+                          <span className="description-percentage text-info">
+                            <i className="fas fa-chart-line" /> {totalSuppliers}
+                          </span>
+                          <h5 className="description-header">{totalSuppliers}</h5>
+                          <span className="description-text">TỔNG SỐ NHÀ CUNG CẤP</span>
                         </div>
                         {/* /.description-block */}
                       </div>

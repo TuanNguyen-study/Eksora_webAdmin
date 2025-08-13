@@ -41,12 +41,10 @@ AxiosInstance.interceptors.response.use(
 
 // API tạo booking mới
 export const createBooking = async (bookingData) => {
-
   try {
     const response = await AxiosInstance.post('/api/bookings', bookingData);
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi tạo booking:', error);
     throw error;
   }
 }
@@ -68,7 +66,6 @@ export const getCategories = async () => {
     const response = await AxiosInstance.get('/api/categories');
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách categories:', error);
     throw error;
   }
 };
@@ -76,12 +73,8 @@ export const getCategories = async () => {
 // API lấy danh sách các tour
 export const getTours = async () => {
   try {
-    console.log('=== GET TOURS WITH POPULATE ===');
-    
     // Thêm query parameter để populate supplier và category data
     const response = await AxiosInstance.get('/api/tours?populate=supplier_id,cateID');
-    console.log('Raw response from /api/tours:', response.data);
-    console.log('Tours count:', response.data?.length);
     
     // Debug supplier data in each tour (commented for performance)
     /*
@@ -108,15 +101,8 @@ export const getTours = async () => {
     }
     */
     
-    console.log('Lấy danh sách các tour thành công:', response.data);
     return response.data;
   } catch (error) {
-    console.error('=== ERROR GETTING TOURS ===');
-    console.error('Error:', error);
-    console.error('Error response:', error.response);
-    console.error('Error status:', error.response?.status);
-    console.error('Error message:', error.message);
-    console.error('===========================');
     throw error;
   }
 };
@@ -150,7 +136,6 @@ export const getSupplierTours = async () => {
     
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi lấy tours của supplier:', error);
     throw error;
   }
 };
@@ -236,7 +221,6 @@ export const debugSupplierTours = async () => {
       myToursData: myTours
     };
   } catch (error) {
-    console.error('Debug supplier tours error:', error);
     throw error;
   }
 };
@@ -258,7 +242,28 @@ export const getToursByRole = async () => {
       // Admin thấy tất cả tours (bao gồm cả đã duyệt và chờ duyệt)
       const allTours = await getTours();
       console.log('Admin role - returning all tours:', allTours?.length);
-      return allTours;
+      
+      // Populate supplier data for admin tours
+      try {
+        const allSuppliers = await getSuppliers();
+        const toursWithSuppliers = allTours.map(tour => {
+          if (typeof tour.supplier_id === 'string') {
+            const matchedSupplier = allSuppliers.find(sup => 
+              (sup.id && sup.id === tour.supplier_id) || 
+              (sup._id && sup._id === tour.supplier_id)
+            );
+            if (matchedSupplier) {
+              return { ...tour, supplier_id: matchedSupplier };
+            }
+          }
+          return tour;
+        });
+        console.log('Populated supplier data for admin tours');
+        return toursWithSuppliers;
+      } catch (supplierError) {
+        console.warn('Could not populate supplier data for admin tours:', supplierError);
+        return allTours;
+      }
     } else if (userRole === 'supplier') {
       // Try to get supplier-specific tours first
       try {
@@ -307,16 +312,56 @@ export const getToursByRole = async () => {
         console.log('Supplier tours list:', supplierTours.map(t => ({ id: t._id, name: t.name, supplier_id: t.supplier_id })));
         console.log('========================');
         
-        return supplierTours;
+        // Populate supplier data for supplier tours
+        try {
+          const allSuppliers = await getSuppliers();
+          const toursWithSuppliers = supplierTours.map(tour => {
+            if (typeof tour.supplier_id === 'string') {
+              const matchedSupplier = allSuppliers.find(sup => 
+                (sup.id && sup.id === tour.supplier_id) || 
+                (sup._id && sup._id === tour.supplier_id)
+              );
+              if (matchedSupplier) {
+                return { ...tour, supplier_id: matchedSupplier };
+              }
+            }
+            return tour;
+          });
+          console.log('Populated supplier data for supplier tours');
+          return toursWithSuppliers;
+        } catch (supplierError) {
+          console.warn('Could not populate supplier data for supplier tours:', supplierError);
+          return supplierTours;
+        }
       }
     } else {
       // Role khác (nếu có) thì thấy tất cả
       const allTours = await getTours();
       console.log('Other role - returning all tours:', allTours?.length);
-      return allTours;
+      
+      // Populate supplier data for other roles
+      try {
+        const allSuppliers = await getSuppliers();
+        const toursWithSuppliers = allTours.map(tour => {
+          if (typeof tour.supplier_id === 'string') {
+            const matchedSupplier = allSuppliers.find(sup => 
+              (sup.id && sup.id === tour.supplier_id) || 
+              (sup._id && sup._id === tour.supplier_id)
+            );
+            if (matchedSupplier) {
+              return { ...tour, supplier_id: matchedSupplier };
+            }
+          }
+          return tour;
+        });
+        console.log('Populated supplier data for other role tours');
+        return toursWithSuppliers;
+      } catch (supplierError) {
+        console.warn('Could not populate supplier data for other role tours:', supplierError);
+        return allTours;
+      }
     }
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách tour theo role:', error);
     throw error;
   }
 };
@@ -329,7 +374,6 @@ export const getToursByLocation = async (cateID) => {
     });
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách tour theo cateID:', error);
     throw error;
   }
 };
@@ -340,7 +384,6 @@ export const getTrips = async (userId) => {
     const response = await AxiosInstance.get(`/api/bookings/user/${userId}`);
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách bookings:', error);
     throw error;
   }
 };
@@ -351,7 +394,6 @@ export const getFavorites = async (user_id) => {
     const response = await AxiosInstance.get(`/api/favorites/${user_id}`);
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách favorites:', error);
     throw error;
   }
 };
@@ -376,7 +418,6 @@ export const addFavorites = async (userId, tourId) => {
     });
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi thêm vào yêu thích:', error);
     throw error;
   }
 };
@@ -412,7 +453,6 @@ export const getPromotion = async () => {
     }
     return [];
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách Promotion:', error);
     throw error;
   }
 };
@@ -427,7 +467,6 @@ export const getUser = async () => {
       throw new Error('Dữ liệu trả về không hợp lệ');
     }
   } catch (error) {
-    console.error('Lỗi khi hiển thị User:', error.message || error);
     throw error;
   }
 };
@@ -438,7 +477,6 @@ export const getCurrentUserRole = async () => {
     const response = await AxiosInstance.get('/api/profile');
     return response.data?.role || null;
   } catch (error) {
-    console.error('Lỗi khi lấy thông tin role:', error);
     throw error;
   }
 };
@@ -484,7 +522,6 @@ export const getAllUsers = async () => {
     const response = await AxiosInstance.get('/api/all');
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi lấy tất cả thông tin người dùng:', error);
     throw error;
   }
 };
@@ -510,7 +547,6 @@ export const getAllBookings = async () => {
     }
     return arr;
   } catch (error) {
-    console.error('Lỗi khi lấy tất cả thông tin booking:', error);
     throw error;
   }
 };
@@ -529,7 +565,6 @@ export const getBookingsByDate = async (date) => {
       return false;
     });
   } catch (error) {
-    console.error('Lỗi khi lấy booking theo ngày:', error);
     throw error;
   }
 };
@@ -583,18 +618,12 @@ export const getBookingCalendarData = async (year, month) => {
     
     return calendarData;
   } catch (error) {
-    console.error('Lỗi khi lấy dữ liệu calendar booking:', error);
     throw error;
   }
 };
 
 // API tạo tour mới
 export const createTour = async (tourData, userRole = null) => {
-  console.log('=== CREATE TOUR API DEBUG ===');
-  console.log('Received tourData:', tourData);
-  console.log('Received userRole:', userRole);
-  console.log('============================');
-
   // Kiểm tra dữ liệu đầu vào, cảnh báo rõ trường nào bị rỗng
   const requiredFields = [
     { key: 'name', label: 'Tên tour' },
@@ -616,7 +645,6 @@ export const createTour = async (tourData, userRole = null) => {
       (typeof tourData[field.key] === 'string' && !tourData[field.key].trim()) ||
       (Array.isArray(tourData[field.key]) && (!tourData[field.key].length || !tourData[field.key][0] || tourData[field.key][0] === ''))
     ) {
-      console.error(`Missing field: ${field.label}`, tourData[field.key]);
       launchErrorToast(`Trường bắt buộc bị thiếu hoặc rỗng: ${field.label}`);
       throw new Error(`Trường bắt buộc bị thiếu hoặc rỗng: ${field.label}`);
     }
@@ -655,35 +683,13 @@ export const createTour = async (tourData, userRole = null) => {
     // Determine API endpoint based on user role
     const apiEndpoint = userRole === 'supplier' ? '/api/create-by-supplier' : '/api/tours';
     
-    if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
-      console.log('API endpoint:', apiEndpoint);
-      console.log('User role:', userRole);
-      console.log('Dữ liệu gửi lên API tạo tour:', dataToSend);
-      console.log('Services data after cleanup:', dataToSend.services);
-    }
-    
     const response = await AxiosInstance.post(apiEndpoint, dataToSend);
     launchSuccessToast('Tạo tour thành công!');
     return response.data;
   } catch (error) {
-    console.error('=== CREATE TOUR ERROR ===');
-    console.error('Error:', error);
-    console.error('Error response:', error.response);
-    console.error('Error response data:', error.response?.data);
-    console.error('Error response status:', error.response?.status);
-    console.error('Error message:', error.message);
-    console.error('========================');
-    
     if (error.response && error.response.data) {
       const errorMessage = error.response.data.message || error.response.data.error || 'Unknown error';
       launchErrorToast('Lỗi khi tạo tour: ' + errorMessage);
-      
-      // Log detailed error for debugging
-      if (error.response.status === 500) {
-        console.error('Server error 500 - possible data validation or server issues');
-        console.error('Data sent:', dataToSend);
-      }
     } else {
       launchErrorToast('Lỗi khi tạo tour!');
     }
@@ -694,16 +700,9 @@ export const createTour = async (tourData, userRole = null) => {
 // API cập nhật tour theo id (chỉ dành cho supplier)
 export const updateTour = async (_id, tourData) => {
   try {
-    console.log('=== API UPDATE TOUR ===');
-    console.log('ID received:', _id);
-    console.log('ID type:', typeof _id);
-    console.log('ID length:', _id?.length);
-    console.log('Tour data:', tourData);
-    console.log('=== SUPPLIER_ID DEBUG ===');
-    console.log('tourData.supplier_id:', tourData.supplier_id);
-    console.log('supplier_id type:', typeof tourData.supplier_id);
-    console.log('supplier_id length:', tourData.supplier_id?.length);
-    console.log('=========================');
+    // Supplier debug logs - keep these
+    console.log('🔍 SUPPLIER UPDATE: tourData.supplier_id:', tourData.supplier_id);
+    console.log('🔍 SUPPLIER UPDATE: supplier_id type:', typeof tourData.supplier_id);
     
     if (!_id) {
       throw new Error('Tour ID is required');
@@ -718,14 +717,33 @@ export const updateTour = async (_id, tourData) => {
     // Sử dụng endpoint cố định /api/update-tours/{_id}
     const response = await AxiosInstance.put(`/api/update-tours/${_id}`, tourData);
     
-    console.log('=== UPDATE RESPONSE DEBUG ===');
-    console.log('Full response:', response.data);
-    console.log('Response tour:', response.data?.tour);
-    console.log('Response supplier_id:', response.data?.tour?.supplier_id);
-    console.log('Response supplier_id type:', typeof response.data?.tour?.supplier_id);
-    console.log('=============================');
+    // Check if we need to populate supplier data manually
+    let updatedTour = response.data?.tour || response.data;
+    
+    // If supplier_id is just a string ID, try to populate it with supplier info
+    if (updatedTour && typeof updatedTour.supplier_id === 'string') {
+      console.log('🔍 SUPPLIER UPDATE: Supplier ID is string, attempting to populate...');
+      try {
+        const allSuppliers = await getSuppliers();
+        const matchedSupplier = allSuppliers.find(sup => 
+          (sup.id && sup.id === updatedTour.supplier_id) || 
+          (sup._id && sup._id === updatedTour.supplier_id)
+        );
+        
+        if (matchedSupplier) {
+          console.log('🔍 SUPPLIER UPDATE: Found matching supplier, populating tour data:', matchedSupplier);
+          updatedTour = {
+            ...updatedTour,
+            supplier_id: matchedSupplier
+          };
+        }
+      } catch (supplierError) {
+        console.warn('🔍 SUPPLIER UPDATE: Could not populate supplier data:', supplierError);
+      }
+    }
+    
     launchSuccessToast('Cập nhật tour thành công!');
-    return response.data;
+    return updatedTour;
   } catch (error) {
     console.error('=== API ERROR ===');
     console.error('Error updating tour:', error);

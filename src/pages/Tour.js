@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTours, getCategories, getSuppliers, updateTour, deleteTour, getToursByRole, getSupplierTours, approveTour, toggleTourStatus, getCurrentUserRole, getUser, testEndpoints, debugSupplierTours } from '../api/api';
-import { FaTag, FaClock, FaList, FaMapMarkerAlt, FaImage, FaAlignLeft, FaCheckCircle } from 'react-icons/fa';
+import { getTours, getCategories, getSuppliers, updateTour, deleteTour, getToursByRole, approveTour, toggleTourStatus, getCurrentUserRole, getUser } from '../api/api';
+import { FaTag, FaClock, FaList, FaMapMarkerAlt, FaImage, FaAlignLeft } from 'react-icons/fa';
 import { uploadImageToCloudinary } from '../api/cloudinary';
 import CkeditorField from '../components/CkeditorField';
+import { launchSuccessToast } from '../components/SuccessToast';
+import { launchErrorToast } from '../components/ErrorToast';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -106,21 +108,19 @@ function Tour() {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const [editingDescription, setEditingDescription] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [minPrice, setMinPrice] = useState(0);
-  const [maxPrice, setMaxPrice] = useState(10000000);
-  const [priceRange, setPriceRange] = useState([0, 10000000]);
-  // Thêm state cho filter TourFilter
-  const [tourFilter, setTourFilter] = useState({ date: 'all', price: [0, 12333334], instant: false });
-  // 1. Thêm state để lọc theo province/category khi click thumbnail
+  const [userRole, setUserRole] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [editingDescription, setEditingDescription] = useState(false);
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedCategoryForProvince, setSelectedCategoryForProvince] = useState('');
   const [provinceList, setProvinceList] = useState([]);
-  const [userRole, setUserRole] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(null);
+  const [priceRange, setPriceRange] = useState([0, 10000000]);
+  const [tourFilter, setTourFilter] = useState(null);
+  const [minPrice, setMinPrice] = useState(0);
+  const [maxPrice, setMaxPrice] = useState(10000000);
   
   // Thêm state cho bộ lọc giá
   const [priceFilter, setPriceFilter] = useState({
@@ -539,43 +539,29 @@ function Tour() {
         setCurrentUser(userProfile);
         
         // Lấy tours theo role
-        let data = await getToursByRole();
+        let data = await getToursByRole(role, userProfile);
         
-        console.log('=== TOURS FROM API (BY ROLE) ===');
-        console.log('User role:', role);
-        console.log('Total tours:', data.length);
-        console.log('Sample tour IDs:');
-        data.slice(0, 5).forEach((tour, index) => {
-          console.log(`Tour ${index + 1}: ID=${tour._id}, Name=${tour.name}, Status=${tour.status}`);
-          console.log(`  Time data: opening_time=${tour.opening_time}, closing_time=${tour.closing_time}`);
-          console.log(`  Legacy time data: open_time=${tour.open_time}, close_time=${tour.close_time}`);
+        console.log('🔍 SUPPLIER DEBUG: Tours loaded, count:', data.length);
+        
+        // Debug supplier data for first few tours
+        data.slice(0, 3).forEach((tour, index) => {
+          console.log(`🔍 Tour ${index + 1} supplier data:`, {
+            tourId: tour._id,
+            tourName: tour.name,
+            supplierIdType: typeof tour.supplier_id,
+            supplierIdValue: tour.supplier_id,
+            hasSupplierName: tour.supplier_id?.first_name || tour.supplier_id?.name || tour.supplier_id?.fullName || 'No name'
+          });
         });
-        console.log('Full tours data:', data);
-        console.log('====================================');
-        
-        console.log('=== FILTER DEBUG ===');
-        console.log('selectedCategory:', selectedCategory);
-        console.log('selectedMonth:', selectedMonth);
-        console.log('selectedYear:', selectedYear);
-        console.log('priceFilter:', priceFilter);
-        console.log('====================');
-        
-        // TEMPORARY: Enable only price filter for now
-        console.log('=== APPLYING PRICE FILTER ONLY ===');
         
         // Lọc theo giá từ bộ lọc người dùng thiết lập
         if (priceFilter.minPrice || priceFilter.maxPrice) {
-          console.log('Applying price filter...');
-          const beforeFilter = data.length;
           data = data.filter(t => {
             const price = Number(t.price) || 0;
             const min = priceFilter.minPrice ? Number(priceFilter.minPrice.replace(/\./g, '')) : 0;
             const max = priceFilter.maxPrice ? Number(priceFilter.maxPrice.replace(/\./g, '')) : Infinity;
-            const match = price >= min && price <= max;
-            console.log(`Tour ${t.name}: price=${price}, min=${min}, max=${max}, match=${match}`);
-            return match;
+            return price >= min && price <= max;
           });
-          console.log(`Price filter: ${beforeFilter} -> ${data.length} tours`);
         }
         
         /*
@@ -863,7 +849,7 @@ function Tour() {
   const handleApproveTour = async (tourId, approved = true) => {
     // Kiểm tra quyền admin trước khi thực hiện
     if (userRole !== 'admin') {
-      alert('Bạn không có quyền thực hiện hành động này!');
+      launchErrorToast('Bạn không có quyền thực hiện hành động này!');
       return;
     }
 
@@ -889,7 +875,7 @@ function Tour() {
   const handleToggleStatus = async (tourId, currentStatus) => {
     // Kiểm tra quyền admin trước khi thực hiện
     if (userRole !== 'admin') {
-      alert('Bạn không có quyền thực hiện hành động này!');
+      launchErrorToast('Bạn không có quyền thực hiện hành động này!');
       return;
     }
 
@@ -901,7 +887,7 @@ function Tour() {
 
     // Test endpoints trước khi toggle
     console.log('Testing available endpoints...');
-    await testEndpoints(tourId);
+    // await testEndpoints(tourId); // Commented out - function not defined
 
     try {
       const isCurrentlyActive = currentStatus === 'active';
@@ -981,33 +967,25 @@ function Tour() {
       try {
         const newTour = { ...form, _id: Date.now().toString() };
         setTours([...tours, newTour]);
-        alert('Thêm tour thành công!');
+        launchSuccessToast('Thêm tour thành công!');
         setShowModal(false);
       } catch (err) {
-        alert('Lỗi khi tạo tour!');
+        launchErrorToast('Lỗi khi tạo tour!');
       }
     } else if (modalType === 'edit') {
       try {
-        console.log('=== FORM SUBMIT DEBUG ===');
-        console.log('Selected tour:', selectedTour);
-        console.log('Form data:', form);
-        console.log('Selected tour ID:', selectedTour?._id);
-        console.log('ID exists:', !!selectedTour?._id);
-        
         if (!selectedTour || !selectedTour._id) {
-          alert('Lỗi: Không tìm thấy ID tour để cập nhật');
+          launchErrorToast('Lỗi: Không tìm thấy ID tour để cập nhật');
           return;
         }
         
         // Check if tour still exists in current tours list
         const tourExists = tours.find(t => t._id === selectedTour._id);
         if (!tourExists) {
-          alert('Lỗi: Tour không còn tồn tại trong danh sách. Vui lòng refresh trang.');
+          launchErrorToast('Lỗi: Tour không còn tồn tại trong danh sách. Vui lòng refresh trang.');
           setShowModal(false);
           return;
         }
-        
-        console.log('Tour exists in current list:', !!tourExists);
         
         // Find the selected supplier object from suppliers list
         const selectedSupplierObject = suppliers.find(sup => 
@@ -1015,11 +993,10 @@ function Tour() {
           (sup._id && sup._id === form.supplier_id)
         );
         
-        console.log('=== SUPPLIER OBJECT PREPARATION ===');
-        console.log('Form supplier_id:', form.supplier_id);
-        console.log('Found supplier object:', selectedSupplierObject);
-        console.log('Suppliers available:', suppliers.length);
-        console.log('====================================');
+        console.log('🔍 SUPPLIER UPDATE DEBUG:');
+        console.log('  Form supplier_id:', form.supplier_id);
+        console.log('  Found supplier object:', selectedSupplierObject?.name || selectedSupplierObject?.fullName || 'Not found');
+        console.log('  Available suppliers:', suppliers.length);
         
         // Prepare data for update - match exact API format
         const updateData = {
@@ -1044,24 +1021,11 @@ function Tour() {
           }))
         };
         
-        console.log('=== FINAL FORM DATA DEBUG ===');
-        console.log('Current form object:', form);
-        console.log('Form supplier_id value:', form.supplier_id);
-        console.log('Form supplier_id type:', typeof form.supplier_id);
-        console.log('UpdateData supplier_id:', updateData.supplier_id);
-        console.log('Data being sent to API:', updateData);
-        console.log('=============================');
-        console.log('Form cateID object:', form.cateID);
-        console.log('Original tour cateID:', selectedTour.cateID);
-        console.log('Tour ID being sent:', selectedTour._id);
-        console.log('API call: updateTour(' + selectedTour._id + ', updateData)');
-        console.log('========================');
+        console.log('🔍 SENDING TO API: supplier_id =', updateData.supplier_id, typeof updateData.supplier_id);
         
         const updated = await updateTour(selectedTour._id, updateData);
         
-        console.log('API Response:', updated);
-        console.log('API Response supplier_id:', updated.supplier_id);
-        console.log('API Response supplier_id type:', typeof updated.supplier_id);
+        console.log('🔍 API RESPONSE: supplier_id =', updated.supplier_id, typeof updated.supplier_id);
         
         // Ensure we have complete data structure, merge with current form data if needed
         const updatedTour = {
@@ -1075,37 +1039,78 @@ function Tour() {
           supplier_id: selectedSupplierObject || updated.supplier_id || selectedTour.supplier_id
         };
         
-        console.log('=== UPDATED TOUR PROCESSING ===');
-        console.log('Selected supplier object to store:', selectedSupplierObject);
-        console.log('Final supplier_id in updatedTour:', updatedTour.supplier_id);
-        console.log('Final supplier_id type:', typeof updatedTour.supplier_id);
-        console.log('Form data supplier_id:', updateData.supplier_id);
-        console.log('Final supplier_id used:', updatedTour.supplier_id);
-        console.log('Final updated tour object:', updatedTour);
-        console.log('Final cateID:', updatedTour.cateID);
-        console.log('===============================');
+        console.log('🔍 UPDATED TOUR FINAL:', {
+          tourId: updatedTour._id,
+          supplierType: typeof updatedTour.supplier_id,
+          supplierValue: updatedTour.supplier_id?.name || updatedTour.supplier_id?.fullName || updatedTour.supplier_id
+        });
         
         // Update both tours list and selectedTour
         setTours(tours.map(t => t._id === selectedTour._id ? updatedTour : t));
         setSelectedTour(updatedTour);  // Update selectedTour for immediate view update
         
-        // Reload tours list to ensure data consistency (optional but recommended)
+        // Enhanced refresh logic to preserve supplier data
         try {
-          const refreshedTours = await getToursByRole();
+          console.log('🔍 REFRESHING TOURS AFTER UPDATE...');
+          const refreshedTours = await getToursByRole(userRole, currentUser);
+          console.log('🔍 RAW REFRESHED TOURS:', refreshedTours?.slice(0, 2)?.map(t => ({
+            name: t.name,
+            supplier_id_type: typeof t.supplier_id,
+            supplier_id_value: t.supplier_id
+          })));
+          
           if (refreshedTours && Array.isArray(refreshedTours)) {
-            setTours(refreshedTours);
-            // Find and update selectedTour from refreshed data
-            const refreshedSelectedTour = refreshedTours.find(t => t._id === selectedTour._id);
+            // Process refreshed tours to ensure supplier data consistency
+            const processedTours = refreshedTours.map(tour => {
+              // If supplier_id is a string and we have the supplier object, preserve it
+              if (typeof tour.supplier_id === 'string' && tour._id === selectedTour._id && selectedSupplierObject) {
+                console.log('🔍 PRESERVING SUPPLIER FOR UPDATED TOUR:', selectedSupplierObject.first_name);
+                return {
+                  ...tour,
+                  supplier_id: selectedSupplierObject // Preserve the complete supplier object
+                };
+              }
+              // For other tours, try to populate supplier data if it's just an ID
+              if (typeof tour.supplier_id === 'string') {
+                const foundSupplier = suppliers.find(sup => 
+                  (sup.id && sup.id === tour.supplier_id) || 
+                  (sup._id && sup._id === tour.supplier_id)
+                );
+                if (foundSupplier) {
+                  console.log('🔍 POPULATING SUPPLIER FOR TOUR:', tour.name, foundSupplier.first_name);
+                  return {
+                    ...tour,
+                    supplier_id: foundSupplier
+                  };
+                }
+              }
+              return tour;
+            });
+            
+            console.log('🔍 PROCESSED REFRESHED TOURS:', processedTours?.slice(0, 2)?.map(t => ({
+              name: t.name,
+              supplier_type: typeof t.supplier_id,
+              supplier_name: t.supplier_id?.first_name || t.supplier_id?.name || 'N/A'
+            })));
+            
+            setTours(processedTours);
+            
+            // Find and update selectedTour from processed data
+            const refreshedSelectedTour = processedTours.find(t => t._id === selectedTour._id);
             if (refreshedSelectedTour) {
               setSelectedTour(refreshedSelectedTour);
+              console.log('🔍 REFRESHED SELECTED TOUR SUPPLIER:', {
+                type: typeof refreshedSelectedTour.supplier_id,
+                value: refreshedSelectedTour.supplier_id?.first_name || refreshedSelectedTour.supplier_id?.name || refreshedSelectedTour.supplier_id
+              });
             }
           }
         } catch (refreshError) {
-          console.warn('Warning: Could not refresh tours list:', refreshError);
+          console.warn('⚠️ Could not refresh tours list:', refreshError.message);
           // Continue with local update if refresh fails
         }
         
-        alert('Cập nhật tour thành công!');
+        launchSuccessToast('Cập nhật tour thành công!');
         
         // Switch back to view mode to see updated data
         setModalType('view');
@@ -1113,7 +1118,7 @@ function Tour() {
         setShowModal(false);
       } catch (err) {
         console.error('Error updating tour:', err);
-        alert('Lỗi khi cập nhật tour: ' + (err.message || 'Unknown error'));
+        launchErrorToast('Lỗi khi cập nhật tour: ' + (err.message || 'Unknown error'));
       }
     }
   };
@@ -1126,7 +1131,7 @@ function Tour() {
       const urls = await Promise.all(files.map(file => uploadImageToCloudinary(file)));
       setForm({ ...form, image: urls });
     } catch (err) {
-      alert('Lỗi upload ảnh!');
+      launchErrorToast('Lỗi upload ảnh!');
     }
   };
 
@@ -1146,16 +1151,17 @@ function Tour() {
     return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   }
 
-  // Debug tours trước khi render
-  console.log('=== RENDER DEBUG ===');
-  console.log('tours length:', tours.length);
-  console.log('pagedTours length:', pagedTours.length);
-  console.log('loading:', loading);
-  console.log('error:', error);
-  console.log('currentPage:', currentPage);
-  console.log('tours data:', tours);
-  console.log('pagedTours data:', pagedTours);
-  console.log('===================');
+  // Debug supplier data before render
+  console.log('🔍 RENDER SUPPLIER DEBUG:');
+  console.log('  Tours loaded:', tours.length);
+  console.log('  Suppliers loaded:', suppliers.length);
+  pagedTours.slice(0, 3).forEach((tour, index) => {
+    console.log(`  Tour ${index + 1} supplier:`, {
+      name: tour.name,
+      supplierType: typeof tour.supplier_id,
+      supplierName: tour.supplier_id?.name || tour.supplier_id?.fullName || 'No name found'
+    });
+  });
 
   return (
     <div className={`content-wrapper bg-white text-dark`} style={{ position: 'relative' }}>
@@ -1424,13 +1430,7 @@ function Tour() {
                                     {isAdmin() && (
                                       <td>
                                         {(() => {
-                                          // Debug supplier data (commented for performance)
-                                          // console.log('=== SUPPLIER DEBUG FOR TOUR ===');
-                                          // console.log('Tour ID:', tour._id);
-                                          // console.log('Tour Name:', tour.name);
-                                          // console.log('Supplier ID raw:', tour.supplier_id);
-                                          
-                                          // Check for null or undefined first - FIXED CONDITION
+                                          // Clean supplier display logic
                                           if (!tour.supplier_id) {
                                             return (
                                               <div className="text-muted">
@@ -1440,88 +1440,57 @@ function Tour() {
                                             );
                                           }
                                           
-                                          // If supplier_id is just an ID string (not populated), tìm từ suppliers list
+                                          let supplierData = null;
+                                          let supplierName = '';
+                                          
+                                          // Handle string ID - find in suppliers list
                                           if (typeof tour.supplier_id === 'string') {
-                                            console.log('Searching for supplier ID:', tour.supplier_id);
-                                            console.log('Available suppliers:', suppliers);
-                                            
-                                            // Tìm supplier từ danh sách đã load (ưu tiên field 'id' trước, sau đó '_id')
-                                            const foundSupplier = suppliers.find(sup => sup.id === tour.supplier_id) ||
-                                                                suppliers.find(sup => sup._id === tour.supplier_id);
-                                            
-                                            console.log('Found supplier by ID lookup:', foundSupplier);
-                                            
-                                            if (foundSupplier) {
-                                              // Ưu tiên fullName, sau đó ghép first_name + last_name, cuối cùng là name
-                                              const supplierName = foundSupplier.fullName || 
-                                                                  `${foundSupplier.first_name || ''} ${foundSupplier.last_name || ''}`.trim() || 
-                                                                  foundSupplier.name || 'Tên không xác định';
-                                              
-                                              return (
-                                                <div>
-                                                  <div className="font-weight-bold text-success">
-                                                    {supplierName}
-                                                  </div>
-                                                  {foundSupplier.email && (
-                                                    <small className="text-muted">
-                                                      <i className="fas fa-envelope mr-1"></i>
-                                                      {foundSupplier.email}
-                                                    </small>
-                                                  )}
-                                                  {foundSupplier.phone && (
-                                                    <small className="text-muted d-block">
-                                                      <i className="fas fa-phone mr-1"></i>
-                                                      {foundSupplier.phone}
-                                                    </small>
-                                                  )}
-                                                </div>
-                                              );
-                                            } else {
-                                              return (
-                                                <div className="text-warning">
-                                                  <i className="fas fa-search mr-1"></i>
-                                                  ID: {tour.supplier_id}
-                                                  <br />
-                                                  <small className="text-muted">(Không tìm thấy thông tin supplier)</small>
-                                                </div>
-                                              );
-                                            }
+                                            supplierData = suppliers.find(sup => 
+                                              sup.id === tour.supplier_id || sup._id === tour.supplier_id
+                                            );
+                                            console.log('🔍 STRING ID LOOKUP:', tour.supplier_id, '→', supplierData?.name || 'Not found');
+                                          }
+                                          // Handle object (already populated)
+                                          else if (typeof tour.supplier_id === 'object' && tour.supplier_id !== null) {
+                                            supplierData = tour.supplier_id;
+                                            console.log('🔍 OBJECT SUPPLIER:', supplierData?.name || supplierData?.fullName || 'No name');
                                           }
                                           
-                                          // If supplier_id is an object (populated) and not null
-                                          if (typeof tour.supplier_id === 'object' && tour.supplier_id !== null) {
-                                            // Ưu tiên fullName, sau đó ghép first_name + last_name, cuối cùng là name  
-                                            const supplierName = tour.supplier_id.fullName ||
-                                                                `${tour.supplier_id.first_name || ''} ${tour.supplier_id.last_name || ''}`.trim() || 
-                                                                tour.supplier_id.name || 'Tên không xác định';
+                                          if (supplierData) {
+                                            supplierName = supplierData.fullName || 
+                                                          `${supplierData.first_name || ''} ${supplierData.last_name || ''}`.trim() || 
+                                                          supplierData.name || 'Tên không xác định';
                                             
                                             return (
                                               <div>
-                                                <div className="font-weight-bold">
+                                                <div className="font-weight-bold text-success">
                                                   {supplierName}
                                                 </div>
-                                                {tour.supplier_id.email && (
+                                                {supplierData.email && (
                                                   <small className="text-muted">
                                                     <i className="fas fa-envelope mr-1"></i>
-                                                    {tour.supplier_id.email}
+                                                    {supplierData.email}
                                                   </small>
                                                 )}
-                                                {tour.supplier_id.phone && (
+                                                {supplierData.phone && (
                                                   <small className="text-muted d-block">
                                                     <i className="fas fa-phone mr-1"></i>
-                                                    {tour.supplier_id.phone}
+                                                    {supplierData.phone}
                                                   </small>
                                                 )}
                                               </div>
                                             );
+                                          } else {
+                                            // Could not find supplier data
+                                            return (
+                                              <div className="text-warning">
+                                                <i className="fas fa-search mr-1"></i>
+                                                ID: {typeof tour.supplier_id === 'string' ? tour.supplier_id : 'Invalid'}
+                                                <br />
+                                                <small className="text-muted">(Không tìm thấy thông tin supplier)</small>
+                                              </div>
+                                            );
                                           }
-                                          
-                                          return (
-                                            <div className="text-danger">
-                                              <i className="fas fa-bug mr-1"></i>
-                                              Lỗi dữ liệu supplier
-                                            </div>
-                                          );
                                         })()}
                                       </td>
                                     )}
