@@ -53,6 +53,7 @@ function SideNav({ onLogoutClick }) {
   const isUsersActive = location.pathname.startsWith('/users');
   const isSuppliersGroupActive = location.pathname.startsWith('/suppliers');
   const isCreateSupplierActive = location.pathname === '/suppliers/create';
+  const isSupplierAnalyticsActive = location.pathname === '/suppliers/analytics';
 
   return (
     <div>
@@ -156,14 +157,14 @@ function SideNav({ onLogoutClick }) {
                 </>
               )}
               
-              {/* Suppliers - Hiển thị cho cả Admin và Supplier */}
-              <li className={`nav-item menu-open${isSuppliersGroupActive ? ' active' : ''}`}>
-                <button type="button" className="nav-link w-100 text-left" style={isSuppliersGroupActive ? { background: '#3f6791', color: '#fff' } : {}}>
-                  <i className="fa-solid fa fa-users"></i>
-                  <i className="right fas fa-angle-left" />
-                  <p> Suppliers </p>
-                </button>
-                {userRole === 'admin' && (
+              {/* Suppliers - Chỉ hiển thị cho Admin */}
+              {userRole === 'admin' && (
+                <li className={`nav-item menu-open${isSuppliersGroupActive ? ' active' : ''}`}>
+                  <button type="button" className="nav-link w-100 text-left" style={isSuppliersGroupActive ? { background: '#3f6791', color: '#fff' } : {}}>
+                    <i className="fa-solid fa fa-users"></i>
+                    <i className="right fas fa-angle-left" />
+                    <p> Suppliers </p>
+                  </button>
                   <ul className="nav nav-treeview">
                     <li className="nav-item">
                       <Link to="/suppliers/create" className="nav-link text-dark" style={isCreateSupplierActive ? { background: '#ebecec' } : {}}>
@@ -171,9 +172,15 @@ function SideNav({ onLogoutClick }) {
                         <p>Create Supplier</p>
                       </Link>
                     </li>
+                    <li className="nav-item">
+                      <Link to="/suppliers/analytics" className="nav-link text-dark" style={isSupplierAnalyticsActive ? { background: '#ebecec' } : {}}>
+                        <i className="far fa-chart-bar nav-icon" />
+                        <p>Analytics</p>
+                      </Link>
+                    </li>
                   </ul>
-                )}
-              </li>
+                </li>
+              )}
               
               {/* Bookings - Hiển thị cho cả Admin và Supplier */}
               <li className="nav-item">

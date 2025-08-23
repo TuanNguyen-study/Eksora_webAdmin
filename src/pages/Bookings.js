@@ -4,7 +4,6 @@ import { getAllBookings, updateBookingStatus, getCurrentUserRole, getUser } from
 import { useLocation } from 'react-router-dom';
 
 function Bookings() {
-  const [userId, setUserId] = useState('');
   const [bookings, setBookings] = useState([]);
   const [allBookings, setAllBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +27,7 @@ function Bookings() {
       setCalendarFilters(location.state.filters);
       
       // Apply calendar filters
-      const { date, tourId, tourName } = location.state.filters;
+      const { date, tourId } = location.state.filters;
       
       if (date) {
         setDateFilter('custom');
@@ -168,62 +167,6 @@ function Bookings() {
     setCurrentPage(1);
   };
 
-  const handleFilter = () => {
-    let filtered = allBookings;
-
-    // Lọc theo tên người đặt
-    if (searchName.trim()) {
-      filtered = filtered.filter(b => {
-        const fullName = `${b.user_id?.first_name || ''} ${b.user_id?.last_name || ''}`.toLowerCase();
-        return fullName.includes(searchName.trim().toLowerCase());
-      });
-    }
-
-    // Lọc theo ngày đặt (booking_date)
-    if (dateFilter !== 'all') {
-      const today = new Date();
-      filtered = filtered.filter(b => {
-        if (!b.booking_date) return false;
-        const bookingDate = new Date(b.booking_date);
-        if (dateFilter === 'today') {
-          return (
-            bookingDate.getDate() === today.getDate() &&
-            bookingDate.getMonth() === today.getMonth() &&
-            bookingDate.getFullYear() === today.getFullYear()
-          );
-        }
-        if (dateFilter === 'month') {
-          return (
-            bookingDate.getMonth() === today.getMonth() &&
-            bookingDate.getFullYear() === today.getFullYear()
-          );
-        }
-        if (dateFilter === 'year') {
-          return bookingDate.getFullYear() === today.getFullYear();
-        }
-        return true;
-      });
-    }
-
-    // Lọc theo trạng thái
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(b => b.status === statusFilter);
-    }
-
-    // Lọc theo loại sản phẩm
-    if (productTypeFilter !== 'all') {
-      filtered = filtered.filter(b => {
-        if (productTypeFilter === 'tour') return b.tour_id;
-        if (productTypeFilter === 'hotel') return b.hotel_id;
-        if (productTypeFilter === 'flight') return b.flight_id;
-        return true;
-      });
-    }
-
-    setBookings(filtered);
-    setCurrentPage(1);
-  };
-
   const handleViewBooking = (booking) => {
     const today = new Date();
     const travelDate = booking.travel_date ? new Date(booking.travel_date) : null;
@@ -246,7 +189,6 @@ function Bookings() {
 
     // --- Logic cho trạng thái refund_requested ---
     let canRefundRequest = false;
-    let refundRequestReason = '';
     if (
       (booking.status === 'canceled' || booking.status === 'cancelled') &&
       booking.paid === true &&
@@ -298,11 +240,6 @@ function Bookings() {
     });
     // eslint-disable-next-line
   }, [bookings]);
-
-  // Tính tổng doanh thu từ các booking đã thanh toán
-  const totalRevenue = allBookings
-    .filter(b => ['paid', 'completed', 'refunded'].includes(b.status))
-    .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
 
   // Tính tổng số booking và tổng doanh thu đã thanh toán trong tháng/năm hiện tại
   const now = new Date();

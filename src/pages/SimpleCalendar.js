@@ -5,8 +5,8 @@ import { useNavigate } from 'react-router-dom';
 function SimpleCalendar() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState(null);
   const [bookingsData, setBookingsData] = useState([]);
+  const [userRole, setUserRole] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'week'
   
@@ -119,7 +119,6 @@ function SimpleCalendar() {
     const month = currentDate.getMonth();
     
     const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - firstDay.getDay()); // Start from Sunday
     

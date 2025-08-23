@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTours, getCategories, getSuppliers, updateTour, deleteTour, getToursByRole, approveTour, toggleTourStatus, getCurrentUserRole, getUser } from '../api/api';
-import { FaTag, FaClock, FaList, FaMapMarkerAlt, FaImage, FaAlignLeft } from 'react-icons/fa';
+import { getCategories, getSuppliers, updateTour, deleteTour, getToursByRole, approveTour, toggleTourStatus, getCurrentUserRole, getUser, debugTourDataStructure, validateToken } from '../api/api';
+import { FaTag, FaList, FaMapMarkerAlt, FaAlignLeft } from 'react-icons/fa';
 import { uploadImageToCloudinary } from '../api/cloudinary';
 import CkeditorField from '../components/CkeditorField';
 import { launchSuccessToast } from '../components/SuccessToast';
@@ -76,12 +76,30 @@ if (!document.getElementById('tour-map-custom-styles')) {
 
 function Tour() {
   const navigate = useNavigate();
-  // Kiểm tra đăng nhập (ví dụ dùng localStorage key 'isLoggedIn')
+  // Kiểm tra đăng nhập và token hợp lệ
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true' || sessionStorage.getItem('isLoggedIn') === 'true';
-    if (!isLoggedIn) {
-      navigate('/login');
-    }
+    const checkAuth = async () => {
+      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true' || sessionStorage.getItem('isLoggedIn') === 'true';
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      
+      if (!isLoggedIn || !token) {
+        navigate('/login');
+        return;
+      }
+      
+      // Kiểm tra token có hợp lệ không
+      try {
+        const isValidToken = await validateToken();
+        if (!isValidToken) {
+          navigate('/login');
+        }
+      } catch (error) {
+        console.error('Error validating token:', error);
+        navigate('/login');
+      }
+    };
+    
+    checkAuth();
   }, [navigate]);
 
   const [tours, setTours] = useState([]);
@@ -145,6 +163,99 @@ function Tour() {
 
   // Helper function để kiểm tra quyền admin
   const isAdmin = () => userRole === 'admin';
+
+  // Helper function để lấy thông tin supplier
+  const getSupplierInfo = (supplierId) => {
+    // Handle null, undefined, or empty supplier_id - tours without suppliers
+    if (!supplierId || supplierId === null || supplierId === undefined) {
+      return {
+        data: null,
+        name: 'Chưa có nhà cung cấp',
+        email: null,
+        phone: null
+      };
+    }
+    
+    // Nếu supplier_id là object (đã populated)
+    if (typeof supplierId === 'object' && supplierId !== null) {
+      console.log('🔍 SUPPLIER OBJECT STRUCTURE:', {
+        keys: Object.keys(supplierId),
+        fullName: supplierId.fullName,
+        companyName: supplierId.companyName,
+        company_name: supplierId.company_name,
+        first_name: supplierId.first_name,
+        last_name: supplierId.last_name,
+        firstName: supplierId.firstName,
+        lastName: supplierId.lastName,
+        name: supplierId.name,
+        businessName: supplierId.businessName,
+        username: supplierId.username,
+        email: supplierId.email,
+        phone: supplierId.phone,
+        // Thêm debug cho các fields khác có thể có
+        title: supplierId.title,
+        displayName: supplierId.displayName,
+        organizationName: supplierId.organizationName,
+        entire: supplierId
+      });
+      
+      const supplierName = supplierId.fullName || 
+            supplierId.companyName || 
+            supplierId.company_name ||
+            `${supplierId.first_name || ''} ${supplierId.last_name || ''}`.trim() || 
+            `${supplierId.firstName || ''} ${supplierId.lastName || ''}`.trim() || 
+            supplierId.name ||
+            supplierId.businessName || 
+            supplierId.username ||
+            supplierId.title ||
+            supplierId.displayName ||
+            supplierId.organizationName ||
+            supplierId._id ||  // Fallback to ID if no name found
+            supplierId.id ||
+            JSON.stringify(supplierId).slice(0, 50) + '...' ||  // Show part of object as last resort
+            'Tên không xác định';
+            
+      console.log('🔍 RESOLVED SUPPLIER NAME:', supplierName);
+      
+      return {
+        data: supplierId,
+        name: supplierName,
+        email: supplierId.email,
+        phone: supplierId.phone
+      };
+    }
+    
+    // Nếu supplier_id là string ID, tìm trong danh sách suppliers
+    if (typeof supplierId === 'string') {
+      const supplier = suppliers.find(sup => 
+        sup._id === supplierId || sup.id === supplierId
+      );
+      
+      if (supplier) {
+        return {
+          data: supplier,
+          name: supplier.fullName || 
+                supplier.companyName || 
+                supplier.company_name ||
+                `${supplier.first_name || ''} ${supplier.last_name || ''}`.trim() || 
+                `${supplier.firstName || ''} ${supplier.lastName || ''}`.trim() || 
+                supplier.name ||
+                supplier.businessName || 
+                supplier.username ||
+                supplier.title ||
+                supplier.displayName ||
+                supplier.organizationName ||
+                supplier._id ||
+                supplier.id ||
+                'Tên không xác định',
+          email: supplier.email,
+          phone: supplier.phone
+        };
+      }
+    }
+    
+    return null;
+  };
 
   // Vietnamese location database for autocomplete
   const vietnameseLocations = [
@@ -530,13 +641,16 @@ function Tour() {
       setLoading(true);
       setError(null);
       try {
-        // Lấy thông tin user và role trước
-        const [role, userProfile] = await Promise.all([
+        // 1. Lấy role, user profile, và suppliers đồng thời
+        const [role, userProfile, suppliersData] = await Promise.all([
           getCurrentUserRole(),
-          getUser()
+          getUser(),
+          getSuppliers()
         ]);
+        
         setUserRole(role);
         setCurrentUser(userProfile);
+        setSuppliers(suppliersData);
         
         // Lấy tours theo role
         let data = await getToursByRole(role, userProfile);
@@ -545,21 +659,35 @@ function Tour() {
         
         // Debug supplier data for first few tours
         data.slice(0, 3).forEach((tour, index) => {
+          const supplierInfo = getSupplierInfo(tour.supplier_id);
           console.log(`🔍 Tour ${index + 1} supplier data:`, {
             tourId: tour._id,
             tourName: tour.name,
             supplierIdType: typeof tour.supplier_id,
             supplierIdValue: tour.supplier_id,
-            hasSupplierName: tour.supplier_id?.first_name || tour.supplier_id?.name || tour.supplier_id?.fullName || 'No name'
+            supplierInfo: supplierInfo,
+            resolvedName: supplierInfo?.name || 'No name found'
           });
         });
+        
+        // Debug suppliers list
+        console.log('🔍 Available suppliers:', suppliers.map(s => ({
+          _id: s._id,
+          id: s.id,
+          name: s.name,
+          fullName: s.fullName,
+          first_name: s.first_name,
+          last_name: s.last_name,
+          email: s.email,
+          keys: Object.keys(s)
+        })));
         
         // Lọc theo giá từ bộ lọc người dùng thiết lập
         if (priceFilter.minPrice || priceFilter.maxPrice) {
           data = data.filter(t => {
             const price = Number(t.price) || 0;
-            const min = priceFilter.minPrice ? Number(priceFilter.minPrice.replace(/\./g, '')) : 0;
-            const max = priceFilter.maxPrice ? Number(priceFilter.maxPrice.replace(/\./g, '')) : Infinity;
+            const min = priceFilter.minPrice ? Number(typeof priceFilter.minPrice === 'string' ? priceFilter.minPrice.replace(/\./g, '') : priceFilter.minPrice) : 0;
+            const max = priceFilter.maxPrice ? Number(typeof priceFilter.maxPrice === 'string' ? priceFilter.maxPrice.replace(/\./g, '') : priceFilter.maxPrice) : Infinity;
             return price >= min && price <= max;
           });
         }
@@ -634,6 +762,11 @@ function Tour() {
         const provinces = [...new Set(data.map(t => t.province).filter(Boolean))];
         setProvinceList(provinces);
       } catch (err) {
+        console.error('Error in fetchTours:', err);
+        if (err.response?.status === 403 || err.response?.status === 401) {
+          // Token hết hạn, đã được xử lý bởi interceptor
+          return;
+        }
         setError('Không thể tải danh sách tour!');
       } finally {
         setLoading(false);
@@ -724,7 +857,7 @@ function Tour() {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [locationQuery, showModal, modalType]);
+  }, [locationQuery, showModal, modalType, handleLocationSearch]);
 
   // Handle click outside to close suggestions
   useEffect(() => {
@@ -746,73 +879,157 @@ function Tour() {
     setShowModal(true);
   };
 
-  const handleEdit = (tour) => {
-    console.log('=== EDIT TOUR DEBUG ===');
-    console.log('Selected tour object:', tour);
-    console.log('Tour ID:', tour._id);
-    console.log('Tour ID type:', typeof tour._id);
-    console.log('Tour cateID:', tour.cateID);
-    console.log('Tour cateID type:', typeof tour.cateID);
-    console.log('Tour supplier_id:', tour.supplier_id);
-    console.log('Tour supplier_id type:', typeof tour.supplier_id);
-    console.log('Tour location:', tour.location);
-    console.log('=======================');
+  //   const handleEdit = (tour) => {
+  //     if (!tour) {
+  //       console.error('❌ Cannot edit: Tour object is null/undefined');
+  //       return;
+  //     }
+
+  //     if (!tour._id) {
+  //       console.error('❌ Cannot edit: Tour is missing _id', tour);
+  //       return;
+  //     }
+
+  //     console.log('🔄 Starting tour edit:', {
+  //       tourId: tour._id,
+  //       tourName: tour.name || 'Unnamed Tour',
+  //       supplierId: tour.supplier_id ? (
+  //         typeof tour.supplier_id === 'object' ? tour.supplier_id._id : tour.supplier_id
+  //       ) : 'No supplier'
+  //     });    // Enhanced supplier ID extraction with better type checking
+  //   let supplierIdValue = '';
+  //   if (tour.supplier_id) {
+  //     if (typeof tour.supplier_id === 'object' && tour.supplier_id !== null) {
+  //       // Extract ID from object, trying all possible ID fields
+  //       supplierIdValue = tour.supplier_id._id || tour.supplier_id.id || '';
+  //       console.log('🔍 Extracted supplier ID from object:', {
+  //         rawObject: tour.supplier_id,
+  //         extractedId: supplierIdValue,
+  //         hasId: Boolean(tour.supplier_id._id),
+  //         has_id: Boolean(tour.supplier_id.id)
+  //       });
+  //     } else if (typeof tour.supplier_id === 'string') {
+  //       // Use ID string directly
+  //       supplierIdValue = tour.supplier_id;
+  //       console.log('🔍 Using supplier ID string:', supplierIdValue);
+  //     }
+  //   }
     
-    // Extract supplier ID - chỉ lưu ID string, không lưu object
-    let supplierIdValue = '';
-    if (tour.supplier_id && typeof tour.supplier_id === 'object') {
+  //   // Validate extracted ID
+  //   if (!supplierIdValue && suppliers.length > 0) {
+  //     console.warn('⚠️ No supplier ID found in tour data, attempting to find matching supplier...');
+  //     // Try to find supplier by other means (name, email, etc)
+  //     const matchingSupplier = suppliers.find(s => 
+  //       (tour.supplier_name && (s.name === tour.supplier_name || s.fullName === tour.supplier_name)) ||
+  //       (tour.supplier_email && s.email === tour.supplier_email)
+  //     );
+  //     if (matchingSupplier) {
+  //       supplierIdValue = matchingSupplier._id || matchingSupplier.id;
+  //       console.log('🔍 Found matching supplier by alternate fields:', supplierIdValue);
+  //     }
+  //   }
+    
+  //   console.log('🔍 Final supplier_id form value:', {
+  //     value: supplierIdValue,
+  //     type: typeof supplierIdValue,
+  //     valid: Boolean(supplierIdValue)
+  //   });
+    
+  //   setSelectedTour(tour);
+    
+  //   // Reset form hoàn toàn trước khi set dữ liệu mới
+  //   const newForm = { 
+  //     name: tour.name || '',
+  //     description: tour.description || '',
+  //     price: tour.price || '',
+  //     max_tickets_per_day: tour.max_tickets_per_day || 1,
+  //     image: tour.image || [],
+  //     location: tour.location || '',
+  //     opening_time: tour.opening_time || '',
+  //     closing_time: tour.closing_time || '',
+  //     cateID: tour.cateID || { _id: '', name: '', image: '' },
+  //     supplier_id: supplierIdValue, // Chỉ lưu ID string
+  //     services: tour.services || []
+  //   };
+    
+  //   console.log('=== FORM RESET DEBUG ===');
+  //   console.log('New form object:', newForm);
+  //   console.log('New form supplier_id:', newForm.supplier_id);
+  //   console.log('========================');
+    
+  //   setForm(newForm);
+    
+  //   // Set location query for map search
+  //   setLocationQuery(tour.location || '');
+  //   setShowSuggestions(false);
+  //   setSelectedCoordinates(null);
+    
+  //   // Reset map states
+  //   setMapLoaded(false);
+  //   setMapError(null);
+  //   setIsInitializingMap(false);
+    
+  //   setModalType('edit');
+  //   setShowModal(true);
+    
+  //   console.log('=== MODAL OPENED DEBUG ===');
+  //   console.log('Modal type:', 'edit');
+  //   console.log('Show modal:', true);
+  //   console.log('==========================');
+  // };
+const handleEdit = (tour) => {
+  if (!tour || !tour._id) {
+    console.error('❌ Không thể chỉnh sửa: Dữ liệu tour không hợp lệ');
+    launchErrorToast('Lỗi: Dữ liệu tour không hợp lệ');
+    return;
+  }
+
+  // Use currentUser state instead of userProfile
+  let supplierIdValue = '';
+  if (tour.supplier_id) {
+    if (typeof tour.supplier_id === 'object' && tour.supplier_id !== null) {
       supplierIdValue = tour.supplier_id._id || tour.supplier_id.id || '';
-      console.log('Extracted supplier ID from object:', supplierIdValue);
-    } else if (tour.supplier_id && typeof tour.supplier_id === 'string') {
+    } else if (typeof tour.supplier_id === 'string') {
       supplierIdValue = tour.supplier_id;
-      console.log('Using supplier ID string:', supplierIdValue);
     }
-    
-    console.log('Final supplier_id value for form:', supplierIdValue);
-    
-    setSelectedTour(tour);
-    
-    // Reset form hoàn toàn trước khi set dữ liệu mới
-    const newForm = { 
-      name: tour.name || '',
-      description: tour.description || '',
-      price: tour.price || '',
-      max_tickets_per_day: tour.max_tickets_per_day || 1,
-      image: tour.image || [],
-      location: tour.location || '',
-      opening_time: tour.opening_time || '',
-      closing_time: tour.closing_time || '',
-      cateID: tour.cateID || { _id: '', name: '', image: '' },
-      supplier_id: supplierIdValue, // Chỉ lưu ID string
-      services: tour.services || []
-    };
-    
-    console.log('=== FORM RESET DEBUG ===');
-    console.log('New form object:', newForm);
-    console.log('New form supplier_id:', newForm.supplier_id);
-    console.log('========================');
-    
-    setForm(newForm);
-    
-    // Set location query for map search
-    setLocationQuery(tour.location || '');
-    setShowSuggestions(false);
-    setSelectedCoordinates(null);
-    
-    // Reset map states
-    setMapLoaded(false);
-    setMapError(null);
-    setIsInitializingMap(false);
-    
-    setModalType('edit');
-    setShowModal(true);
-    
-    console.log('=== MODAL OPENED DEBUG ===');
-    console.log('Modal type:', 'edit');
-    console.log('Show modal:', true);
-    console.log('==========================');
+  } else if (userRole === 'supplier' && currentUser?._id) {
+    supplierIdValue = currentUser._id; // Use currentUser._id
+    console.log('🔍 Mặc định supplier_id từ currentUser:', supplierIdValue);
+  } else if (suppliers.length > 0) {
+    supplierIdValue = suppliers[0]._id || suppliers[0].id; // Gán nhà cung cấp đầu tiên
+    console.log('🔍 Không có supplier_id, mặc định chọn:', supplierIdValue);
+  } else {
+    console.warn('⚠️ Không có nhà cung cấp nào trong danh sách');
+    launchErrorToast('Không tìm thấy nhà cung cấp để gán!');
+  }
+
+  const newForm = {
+    name: tour.name || '',
+    description: tour.description || '',
+    price: tour.price || '',
+    price_child: tour.price_child || '',
+    image: tour.image || [],
+    location: tour.location || '',
+    opening_time: tour.opening_time || '',
+    closing_time: tour.closing_time || '',
+    cateID: tour.cateID || { _id: '', name: '', image: '' },
+    supplier_id: supplierIdValue,
+    services: tour.services || [],
+    max_tickets_per_day: tour.max_tickets_per_day || 1,
+    status: tour.status || 'pending'
   };
 
+  setSelectedTour(tour);
+  setForm(newForm);
+  setLocationQuery(tour.location || '');
+  setShowSuggestions(false);
+  setSelectedCoordinates(null);
+  setMapLoaded(false);
+  setMapError(null);
+  setIsInitializingMap(false);
+  setModalType('edit');
+  setShowModal(true);
+};
   const handleDelete = async (id) => {
     if (window.confirm('Bạn có chắc muốn xóa tour này?')) {
       try {
@@ -928,23 +1145,18 @@ function Tour() {
         const selectedCategory = categories.find(cat => cat.name === value);
         setForm({ ...form, cateID: selectedCategory || { _id: '', name: value } });
       } else if (name === 'supplier_id') {
-        console.log('=== SUPPLIER SELECTION DEBUG ===');
-        console.log('Selected supplier ID:', value);
-        console.log('Available suppliers:', suppliers);
-        console.log('Current form before change:', form);
-        
-        // Tìm supplier object từ danh sách để debug, nhưng chỉ lưu ID
-        const selectedSupplier = suppliers.find(sup => (sup._id === value) || (sup.id === value));
-        
-        console.log('Found supplier:', selectedSupplier);
-        console.log('Will save supplier_id as:', value);
-        
-        // Chỉ lưu ID string của supplier, không lưu object
-        const newForm = { ...form, supplier_id: value };
-        console.log('New form after supplier change:', newForm);
-        console.log('===============================');
-        
-        setForm(newForm);
+    // Tracking supplier selection
+    const selectedSupplier = suppliers.find(sup => (sup._id === value) || (sup.id === value));
+    console.log('👤 SUPPLIER CHANGE EVENT:', {
+      oldValue: form.supplier_id,
+      newValue: value,
+      supplierFound: !!selectedSupplier,
+      supplierName: selectedSupplier?.name || selectedSupplier?.fullName || 'Unknown'
+    });
+    
+    const newForm = { ...form, supplier_id: value };
+    console.log('📝 NEW FORM STATE:', newForm);
+    setForm(newForm);
       } else if (name === 'price') {
         // Handle price formatting
         const raw = value.replace(/\D/g, '');
@@ -961,169 +1173,503 @@ function Tour() {
     }
   };
 
-  const handleFormSubmit = async (e) => {
-    e.preventDefault();
-    if (modalType === 'add') {
-      try {
-        const newTour = { ...form, _id: Date.now().toString() };
-        setTours([...tours, newTour]);
-        launchSuccessToast('Thêm tour thành công!');
-        setShowModal(false);
-      } catch (err) {
-        launchErrorToast('Lỗi khi tạo tour!');
-      }
-    } else if (modalType === 'edit') {
-      try {
-        if (!selectedTour || !selectedTour._id) {
-          launchErrorToast('Lỗi: Không tìm thấy ID tour để cập nhật');
-          return;
-        }
+  // const handleFormSubmit = async (e) => {
+  //   e.preventDefault();
+  //   if (modalType === 'add') {
+  //     try {
+  //       const newTour = { ...form, _id: Date.now().toString() };
+  //       setTours([...tours, newTour]);
+  //       launchSuccessToast('Thêm tour thành công!');
+  //       setShowModal(false);
+  //     } catch (err) {
+  //       launchErrorToast('Lỗi khi tạo tour!');
+  //     }
+  //   } else if (modalType === 'edit') {
+  //     try {
+  //       if (!selectedTour || !selectedTour._id) {
+  //         launchErrorToast('Lỗi: Không tìm thấy ID tour để cập nhật');
+  //         return;
+  //       }
         
-        // Check if tour still exists in current tours list
-        const tourExists = tours.find(t => t._id === selectedTour._id);
-        if (!tourExists) {
-          launchErrorToast('Lỗi: Tour không còn tồn tại trong danh sách. Vui lòng refresh trang.');
-          setShowModal(false);
-          return;
-        }
+  //       // Check if tour still exists in current tours list
+  //       const tourExists = tours.find(t => t._id === selectedTour._id);
+  //       if (!tourExists) {
+  //         launchErrorToast('Lỗi: Tour không còn tồn tại trong danh sách. Vui lòng refresh trang.');
+  //         setShowModal(false);
+  //         return;
+  //       }
         
-        // Find the selected supplier object from suppliers list
-        const selectedSupplierObject = suppliers.find(sup => 
-          (sup.id && sup.id === form.supplier_id) || 
-          (sup._id && sup._id === form.supplier_id)
-        );
+  //       // Find the selected supplier object from suppliers list
+  //       const selectedSupplierObject = suppliers.find(sup => 
+  //         (sup.id && sup.id === form.supplier_id) || 
+  //         (sup._id && sup._id === form.supplier_id)
+  //       );
         
-        console.log('🔍 SUPPLIER UPDATE DEBUG:');
-        console.log('  Form supplier_id:', form.supplier_id);
-        console.log('  Found supplier object:', selectedSupplierObject?.name || selectedSupplierObject?.fullName || 'Not found');
-        console.log('  Available suppliers:', suppliers.length);
+  //       console.log('🔍 SUPPLIER UPDATE DEBUG:');
+  //       console.log('  Form supplier_id:', form.supplier_id);
+  //       console.log('  Found supplier object:', selectedSupplierObject?.name || selectedSupplierObject?.fullName || 'Not found');
+  //       console.log('  Available suppliers:', suppliers.length);
         
-        // Prepare data for update - match exact API format
-        const updateData = {
-          name: form.name,
-          description: form.description,
-          price: typeof form.price === 'string' ? Number(form.price.replace(/\./g, '')) : Number(form.price),
-          max_tickets_per_day: Number(form.max_tickets_per_day) || 1,
-          image: Array.isArray(form.image) ? form.image : [form.image || ''],
-          cateID: form.cateID?._id || null,
-          supplier_id: form.supplier_id || null, // Send string ID to backend
-          location: form.location,
-          opening_time: form.opening_time,
-          closing_time: form.closing_time,
-          services: (form.services || []).map(service => ({
-            name: service.name,
-            type: service.type,
-            options: (service.options || []).map(option => ({
-              title: option.title,
-              price_extra: Number(option.price_extra) || 0,
-              description: option.description || ''
-            }))
-          }))
-        };
+  //       // Enhanced data preparation with robust type checking and validation
+  //       const updateData = {
+  //         name: form.name?.trim(),
+  //         description: form.description?.trim(),
+  //         price: (() => {
+  //           const rawPrice = typeof form.price === 'string' ? form.price.replace(/\./g, '') : form.price;
+  //           const numPrice = Number(rawPrice);
+  //           if (isNaN(numPrice)) {
+  //             console.warn('⚠️ Invalid price format:', form.price);
+  //             return 0;
+  //           }
+  //           return numPrice;
+  //         })(),
+  //         max_tickets_per_day: Number(form.max_tickets_per_day) || 1,
+  //         image: (() => {
+  //           if (Array.isArray(form.image)) {
+  //             return form.image.filter(img => img && typeof img === 'string');
+  //           }
+  //           return form.image ? [form.image] : [];
+  //         })(),
+  //         cateID: (() => {
+  //           const id = form.cateID?._id;
+  //           if (!id) {
+  //             console.warn('⚠️ No category ID found:', form.cateID);
+  //           }
+  //           return id || null;
+  //         })(),
+  //         supplier_id: (() => {
+  //           // Ensure we have a valid supplier ID string
+  //           let supplierId = null;
+            
+  //           if (form.supplier_id) {
+  //             if (typeof form.supplier_id === 'object' && form.supplier_id !== null) {
+  //               supplierId = form.supplier_id._id || form.supplier_id.id;
+  //             } else if (typeof form.supplier_id === 'string') {
+  //               supplierId = form.supplier_id;
+  //             }
+  //           }
+            
+  //           if (!supplierId) {
+  //             console.warn('⚠️ No supplier ID found in form data');
+  //             throw new Error('Supplier ID is required');
+  //           }
+            
+  //           // Validate that the ID exists in our suppliers list
+  //           const supplier = suppliers.find(s => s._id === supplierId || s.id === supplierId);
+  //           if (!supplier) {
+  //             console.warn(`⚠️ Supplier ID ${supplierId} not found in suppliers list`);
+  //             throw new Error('Invalid supplier selected');
+  //           }
+            
+  //           console.log('✅ Valid supplier found:', {
+  //             id: supplierId,
+  //             name: supplier.name || supplier.fullName || `${supplier.first_name} ${supplier.last_name}`,
+  //           });
+            
+  //           return supplierId;
+  //         })(),
+  //         location: form.location?.trim(),
+  //         opening_time: form.opening_time?.trim(),
+  //         closing_time: form.closing_time?.trim(),
+  //         services: (() => {
+  //           if (!Array.isArray(form.services)) {
+  //             return [];
+  //           }
+  //           return form.services
+  //             .filter(service => service && service.name) // Only include services with names
+  //             .map(service => ({
+  //               name: service.name?.trim(),
+  //               type: service.type === 'multiple' ? 'multiple' : 'single', // Default to single if invalid
+  //               options: Array.isArray(service.options) ? 
+  //                 service.options
+  //                   .filter(option => option && option.title) // Only include options with titles
+  //                   .map(option => ({
+  //                     title: option.title?.trim(),
+  //                     price_extra: Number(option.price_extra) || 0,
+  //                     description: option.description?.trim() || ''
+  //                   }))
+  //                 : []
+  //             }));
+  //         })()
+  //       };
         
-        console.log('🔍 SENDING TO API: supplier_id =', updateData.supplier_id, typeof updateData.supplier_id);
+  //       // Validate required fields
+  //       const requiredFields = ['name', 'location', 'price', 'supplier_id', 'cateID'];
+  //       const missingFields = requiredFields.filter(field => !updateData[field]);
         
-        const updated = await updateTour(selectedTour._id, updateData);
+  //       if (missingFields.length > 0) {
+  //         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+  //       }
         
-        console.log('🔍 API RESPONSE: supplier_id =', updated.supplier_id, typeof updated.supplier_id);
+  //       console.log('🔍 PREPARED UPDATE DATA:', {
+  //         hasSupplier: Boolean(updateData.supplier_id),
+  //         supplierId: updateData.supplier_id,
+  //         supplierType: typeof updateData.supplier_id,
+  //         categoryId: updateData.cateID,
+  //         serviceCount: updateData.services.length
+  //       });
         
-        // Ensure we have complete data structure, merge with current form data if needed
-        const updatedTour = {
-          ...selectedTour,  // Keep original data as fallback
-          ...updated,       // Apply API response
-          ...updateData,    // Ensure our form data is preserved
-          _id: selectedTour._id,  // Preserve ID
-          // Preserve populated fields that might not be returned by API
-          cateID: updated.cateID && typeof updated.cateID === 'object' ? updated.cateID : selectedTour.cateID,
-          // IMPORTANT: Store the complete supplier object for display purposes
-          supplier_id: selectedSupplierObject || updated.supplier_id || selectedTour.supplier_id
-        };
+  //       console.log('🔍 SENDING TO API: supplier_id =', updateData.supplier_id, typeof updateData.supplier_id);
         
-        console.log('🔍 UPDATED TOUR FINAL:', {
-          tourId: updatedTour._id,
-          supplierType: typeof updatedTour.supplier_id,
-          supplierValue: updatedTour.supplier_id?.name || updatedTour.supplier_id?.fullName || updatedTour.supplier_id
-        });
+  //       // Send update to API
+  //       // Track tour update
+  //       console.log('� Updating tour:', {
+  //         id: selectedTour._id,
+  //         name: updateData.name,
+  //         supplier: updateData.supplier_id
+  //       });
         
-        // Update both tours list and selectedTour
-        setTours(tours.map(t => t._id === selectedTour._id ? updatedTour : t));
-        setSelectedTour(updatedTour);  // Update selectedTour for immediate view update
+  //       const updated = await updateTour(selectedTour._id, updateData);
         
-        // Enhanced refresh logic to preserve supplier data
-        try {
-          console.log('🔍 REFRESHING TOURS AFTER UPDATE...');
-          const refreshedTours = await getToursByRole(userRole, currentUser);
-          console.log('🔍 RAW REFRESHED TOURS:', refreshedTours?.slice(0, 2)?.map(t => ({
-            name: t.name,
-            supplier_id_type: typeof t.supplier_id,
-            supplier_id_value: t.supplier_id
-          })));
+  //       console.log('� Server response:', {
+  //         success: Boolean(updated),
+  //         updatedTourId: updated?._id,
+  //         updatedSupplierId: updated?.supplier_id
+  //       });
+        
+  //       // Find the complete supplier object for display
+  //       const supplierObject = suppliers.find(sup => 
+  //         (sup._id === updateData.supplier_id) || (sup.id === updateData.supplier_id)
+  //       );
+        
+  //       if (!supplierObject) {
+  //         console.warn('⚠️ Could not find supplier object for ID:', updateData.supplier_id);
+  //       }
+        
+  //       // Construct complete updated tour object
+  //       const updatedTour = {
+  //         ...selectedTour,  // Base: Keep original data as fallback
+  //         ...updated,       // Layer 1: Apply API response
+  //         ...updateData,    // Layer 2: Ensure form data is preserved
+  //         _id: selectedTour._id,  // Always preserve original ID
           
-          if (refreshedTours && Array.isArray(refreshedTours)) {
-            // Process refreshed tours to ensure supplier data consistency
-            const processedTours = refreshedTours.map(tour => {
-              // If supplier_id is a string and we have the supplier object, preserve it
-              if (typeof tour.supplier_id === 'string' && tour._id === selectedTour._id && selectedSupplierObject) {
-                console.log('🔍 PRESERVING SUPPLIER FOR UPDATED TOUR:', selectedSupplierObject.first_name);
-                return {
-                  ...tour,
-                  supplier_id: selectedSupplierObject // Preserve the complete supplier object
-                };
-              }
-              // For other tours, try to populate supplier data if it's just an ID
-              if (typeof tour.supplier_id === 'string') {
-                const foundSupplier = suppliers.find(sup => 
-                  (sup.id && sup.id === tour.supplier_id) || 
-                  (sup._id && sup._id === tour.supplier_id)
-                );
-                if (foundSupplier) {
-                  console.log('🔍 POPULATING SUPPLIER FOR TOUR:', tour.name, foundSupplier.first_name);
-                  return {
-                    ...tour,
-                    supplier_id: foundSupplier
-                  };
-                }
-              }
-              return tour;
-            });
-            
-            console.log('🔍 PROCESSED REFRESHED TOURS:', processedTours?.slice(0, 2)?.map(t => ({
-              name: t.name,
-              supplier_type: typeof t.supplier_id,
-              supplier_name: t.supplier_id?.first_name || t.supplier_id?.name || 'N/A'
-            })));
-            
-            setTours(processedTours);
-            
-            // Find and update selectedTour from processed data
-            const refreshedSelectedTour = processedTours.find(t => t._id === selectedTour._id);
-            if (refreshedSelectedTour) {
-              setSelectedTour(refreshedSelectedTour);
-              console.log('🔍 REFRESHED SELECTED TOUR SUPPLIER:', {
-                type: typeof refreshedSelectedTour.supplier_id,
-                value: refreshedSelectedTour.supplier_id?.first_name || refreshedSelectedTour.supplier_id?.name || refreshedSelectedTour.supplier_id
-              });
-            }
-          }
-        } catch (refreshError) {
-          console.warn('⚠️ Could not refresh tours list:', refreshError.message);
-          // Continue with local update if refresh fails
-        }
+  //         // Special handling for category
+  //         cateID: (() => {
+  //           if (updated.cateID && typeof updated.cateID === 'object') {
+  //             return updated.cateID; // Use API response if it's complete
+  //           }
+  //           if (selectedTour.cateID && typeof selectedTour.cateID === 'object') {
+  //             return selectedTour.cateID; // Fall back to original data
+  //           }
+  //           // Construct from categories list if needed
+  //           const categoryId = updateData.cateID;
+  //           const category = categories.find(c => c._id === categoryId);
+  //           return category || { _id: categoryId, name: 'Unknown Category' };
+  //         })(),
+          
+  //         // Special handling for supplier
+  //         supplier_id: (() => {
+  //           if (supplierObject) {
+  //             // We have the complete supplier object
+  //             return supplierObject;
+  //           }
+  //           if (updated.supplier_id && typeof updated.supplier_id === 'object') {
+  //             // API returned populated supplier
+  //             return updated.supplier_id;
+  //           }
+  //           // Fall back to ID only if we must
+  //           return updateData.supplier_id;
+  //         })()
+  //       };
         
-        launchSuccessToast('Cập nhật tour thành công!');
+  //       console.log('🔍 UPDATED TOUR FINAL:', {
+  //         tourId: updatedTour._id,
+  //         supplierType: typeof updatedTour.supplier_id,
+  //         supplierValue: updatedTour.supplier_id?.name || updatedTour.supplier_id?.fullName || updatedTour.supplier_id
+  //       });
         
-        // Switch back to view mode to see updated data
-        setModalType('view');
-        setForm({});  // Clear form data
-        setShowModal(false);
-      } catch (err) {
-        console.error('Error updating tour:', err);
-        launchErrorToast('Lỗi khi cập nhật tour: ' + (err.message || 'Unknown error'));
-      }
-    }
-  };
+  //       // Update both tours list and selectedTour
+  //       setTours(tours.map(t => t._id === selectedTour._id ? updatedTour : t));
+  //       setSelectedTour(updatedTour);  // Update selectedTour for immediate view update
+        
+  //       // Enhanced refresh logic with better data validation and logging
+  //       try {
+  //         console.log('🔍 REFRESHING TOURS AFTER UPDATE...');
+  //         console.log('Current user role:', userRole);
+  //         console.log('Current user:', currentUser);
+          
+  //         const refreshedTours = await getToursByRole(userRole, currentUser);
+          
+  //         // Detailed logging of received data
+  //         console.log('🔍 API RESPONSE DATA:', {
+  //           receivedCount: refreshedTours?.length || 0,
+  //           isArray: Array.isArray(refreshedTours),
+  //           firstTwoTours: refreshedTours?.slice(0, 2)?.map(t => ({
+  //             id: t._id,
+  //             name: t.name,
+  //             supplier_id_type: typeof t.supplier_id,
+  //             supplier_id_value: t.supplier_id,
+  //             supplier_name: t.supplier_id?.name || t.supplier_id?.fullName,
+  //             hasImages: Boolean(t.image?.length),
+  //             status: t.status
+  //           }))
+  //         });
+          
+  //         if (refreshedTours && Array.isArray(refreshedTours)) {
+  //           // Process refreshed tours with enhanced validation and supplier mapping
+  //           const processedTours = refreshedTours.map(tour => {
+  //             if (!tour || !tour._id) {
+  //               console.warn('⚠️ Invalid tour data received:', tour);
+  //               return null;
+  //             }
+
+  //             // Deep clone to avoid reference issues
+  //             const processedTour = { ...tour };
+
+  //             // Handle supplier data
+  //             if (tour.supplier_id) {
+  //               if (typeof tour.supplier_id === 'string') {
+  //                 // Try to find full supplier object
+  //                 const foundSupplier = suppliers.find(sup => 
+  //                   (sup._id === tour.supplier_id) || (sup.id === tour.supplier_id)
+  //                 );
+
+  //                 if (foundSupplier) {
+  //                   console.log('✅ Found supplier for tour:', {
+  //                     tourName: tour.name,
+  //                     supplierId: tour.supplier_id,
+  //                     supplierName: foundSupplier.name || foundSupplier.fullName
+  //                   });
+  //                   processedTour.supplier_id = foundSupplier;
+  //                 } else {
+  //                   console.warn('⚠️ Could not find supplier object for ID:', tour.supplier_id);
+  //                   processedTour.supplier_id = { _id: tour.supplier_id, name: 'Unknown Supplier' };
+  //                 }
+  //               } else if (typeof tour.supplier_id === 'object' && tour.supplier_id !== null) {
+  //                 // Verify and enhance supplier object if needed
+  //                 const foundSupplier = suppliers.find(sup => 
+  //                   (sup._id === tour.supplier_id._id) || (sup.id === tour.supplier_id.id)
+  //                 );
+                  
+  //                 if (foundSupplier) {
+  //                   processedTour.supplier_id = foundSupplier; // Use complete supplier data
+  //                 }
+  //               }
+  //             }
+
+  //             // Handle category data
+  //             if (tour.cateID) {
+  //               if (typeof tour.cateID === 'string') {
+  //                 const foundCategory = categories.find(cat => cat._id === tour.cateID);
+  //                 if (foundCategory) {
+  //                   processedTour.cateID = foundCategory;
+  //                 }
+  //               }
+  //             }
+
+  //             // Ensure all required fields are present
+  //             const requiredFields = ['name', 'location', 'price', 'status'];
+  //             const missingFields = requiredFields.filter(field => !processedTour[field]);
+              
+  //             if (missingFields.length > 0) {
+  //               console.warn(`⚠️ Tour ${tour._id} missing fields:`, missingFields);
+  //             }
+
+  //             return processedTour;
+  //           }).filter(Boolean); // Remove any null entries
+            
+  //           // Check processed data
+  //           console.log('✔️ Update summary:', {
+  //             totalTours: processedTours.length,
+  //             updatedTourName: processedTours.find(t => t._id === selectedTour._id)?.name,
+  //             hasSupplier: Boolean(processedTours.find(t => t._id === selectedTour._id)?.supplier_id)
+  //           });
+
+  //           // Validation before state update
+  //           if (processedTours.some(t => !t._id || !t.name || !t.supplier_id)) {
+  //             console.error('❌ Invalid tour data detected - missing required fields');
+  //             return; // Prevent invalid state update
+  //           }
+
+  //           // Update tours state
+  //           setTours(processedTours);
+            
+  //           // Find and update selectedTour with enhanced validation
+  //           const refreshedSelectedTour = processedTours.find(t => t._id === selectedTour._id);
+            
+  //           if (refreshedSelectedTour) {
+  //             console.log('✅ Selected tour updated:', {
+  //               id: refreshedSelectedTour._id,
+  //               name: refreshedSelectedTour.name,
+  //               supplier: {
+  //                 type: typeof refreshedSelectedTour.supplier_id,
+  //                 value: refreshedSelectedTour.supplier_id?.name || 
+  //                        refreshedSelectedTour.supplier_id?.fullName || 
+  //                        (typeof refreshedSelectedTour.supplier_id === 'string' ? refreshedSelectedTour.supplier_id : 'N/A')
+  //               },
+  //               hasImages: Boolean(refreshedSelectedTour.image?.length),
+  //               status: refreshedSelectedTour.status
+  //             });
+  //             setSelectedTour(refreshedSelectedTour);
+  //           } else {
+  //             console.error('❌ Could not find refreshed data for selected tour:', selectedTour._id);
+  //           }
+  //         }
+  //       } catch (refreshError) {
+  //         console.warn('⚠️ Could not refresh tours list:', refreshError.message);
+  //         // Continue with local update if refresh fails
+  //       }
+        
+  //       launchSuccessToast('Cập nhật tour thành công!');
+        
+  //       // Switch back to view mode to see updated data
+  //       setModalType('view');
+  //       setForm({});  // Clear form data
+  //       setShowModal(false);
+  //     } catch (err) {
+  //       console.error('Error updating tour:', err);
+  //       launchErrorToast('Lỗi khi cập nhật tour: ' + (err.message || 'Unknown error'));
+  //     }
+  //   }
+  // };
 
   // Xử lý upload ảnh từ máy tính lên Cloudinary
+const handleFormSubmit = async (e) => {
+  e.preventDefault();
+  if (modalType === 'edit') {
+    try {
+      if (!selectedTour || !selectedTour._id) {
+        throw new Error('Không tìm thấy ID tour để cập nhật');
+      }
+
+      const userProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
+      
+      // Debug supplier_id logic
+      const resolvedSupplierId = userRole === 'supplier' ? currentUser?._id : form.supplier_id;
+      console.log('🔍 SUPPLIER ID RESOLUTION:', {
+        userRole,
+        currentUserId: currentUser?._id,
+        formSupplierId: form.supplier_id,
+        resolvedSupplierId,
+        userProfileId: userProfile._id
+      });
+      
+      const updateData = {
+        name: form.name?.trim(),
+        description: form.description?.trim(),
+        price: Number(typeof form.price === 'string' ? form.price.replace(/\./g, '') : form.price) || 0,
+        price_child: Number(typeof form.price_child === 'string' ? form.price_child.replace(/\./g, '') : form.price_child) || 0,
+        image: Array.isArray(form.image) ? form.image.filter(img => img && typeof img === 'string') : [],
+        cateID: form.cateID?._id || form.cateID,
+        supplier_id: resolvedSupplierId,
+        location: form.location?.trim(),
+        opening_time: form.opening_time?.trim(),
+        closing_time: form.closing_time?.trim(),
+        max_tickets_per_day: Number(form.max_tickets_per_day) || 1,
+        status: form.status || 'pending',
+        services: Array.isArray(form.services) ? form.services
+          .filter(service => service && service.name)
+          .map(service => ({
+            name: service.name?.trim(),
+            type: service.type === 'multiple' ? 'multiple' : 'single',
+            options: Array.isArray(service.options) ? 
+              service.options
+                .filter(option => option && option.title)
+                .map(option => ({
+                  title: option.title?.trim(),
+                  price_extra: Number(option.price_extra) || 0,
+                  description: option.description?.trim() || ''
+                }))
+              : []
+          })) : []
+      };
+
+      const requiredFields = ['name', 'location', 'price', 'cateID', 'supplier_id'];
+      const missingFields = requiredFields.filter(field => !updateData[field]);
+      
+      console.log('🔍 VALIDATION DEBUG:', {
+        requiredFields,
+        updateData: Object.keys(updateData).reduce((acc, key) => {
+          acc[key] = updateData[key] ? `${typeof updateData[key]}: ${updateData[key]}` : 'MISSING';
+          return acc;
+        }, {}),
+        missingFields
+      });
+      
+      if (missingFields.length > 0) {
+        throw new Error(`Thiếu các trường bắt buộc: ${missingFields.join(', ')}`);
+      }
+
+      if (userRole === 'admin') {
+        const supplier = suppliers.find(s => s._id === updateData.supplier_id || s.id === updateData.supplier_id);
+        console.log('🔍 SUPPLIER VALIDATION:', {
+          searchingSupplierId: updateData.supplier_id,
+          availableSuppliers: suppliers.map(s => ({ _id: s._id, id: s.id, name: s.name })),
+          foundSupplier: supplier ? { _id: supplier._id, id: supplier.id, name: supplier.name } : null
+        });
+        
+        if (!supplier) {
+          throw new Error(`Nhà cung cấp với ID ${updateData.supplier_id} không tồn tại`);
+        }
+      }
+
+      console.log('🔍 Dữ liệu gửi API:', updateData);
+      
+      // Thêm debug cho supplier_id trước khi gửi API
+      console.log('🎯 SUPPLIER DEBUG BEFORE API CALL:', {
+        'User Role': userRole,
+        'Current User ID': currentUser?._id,
+        'Form Supplier ID': form.supplier_id,
+        'Resolved Supplier ID': resolvedSupplierId,
+        'Update Data Supplier ID': updateData.supplier_id,
+        'Available Suppliers': suppliers.map(s => ({
+          _id: s._id,
+          id: s.id,
+          name: s.name || s.fullName || `${s.first_name} ${s.last_name}`
+        }))
+      });
+      
+      const updated = await updateTour(selectedTour._id, updateData);
+      
+      // Thêm debug log sau khi nhận response từ API
+      console.log('🎯 RESPONSE FROM API:', {
+        'Updated Tour From API': updated,
+        'Selected Tour ID': selectedTour._id,
+        'Original Tour Supplier': selectedTour.supplier_id,
+        'API Response Supplier': updated.supplier_id
+      });
+      
+      const updatedTour = {
+        ...selectedTour,
+        ...updated,
+        ...updateData,
+        _id: selectedTour._id,
+        cateID: categories.find(c => c._id === updateData.cateID) || form.cateID,
+        supplier_id: userRole === 'supplier' ? currentUser : suppliers.find(s => s._id === updateData.supplier_id || s.id === updateData.supplier_id) || updateData.supplier_id
+      };
+
+      console.log('🔍 Updated tour object:', {
+        _id: updatedTour._id,
+        name: updatedTour.name,
+        supplier_id: updatedTour.supplier_id,
+        supplierType: typeof updatedTour.supplier_id
+      });
+
+      setTours(tours.map(t => t._id === selectedTour._id ? updatedTour : t));
+      setSelectedTour(updatedTour);
+      launchSuccessToast('Cập nhật tour thành công!');
+      setModalType('view');
+      setForm({});
+      setShowModal(false);
+
+      console.log('🎯 REFRESHING TOURS LIST...');
+      const refreshedTours = await getToursByRole();
+      console.log('🎯 REFRESHED TOURS:', {
+        'Total Tours': refreshedTours.length,
+        'Updated Tour in List': refreshedTours.find(t => t._id === selectedTour._id),
+        'Updated Tour Supplier in List': refreshedTours.find(t => t._id === selectedTour._id)?.supplier_id
+      });
+      setTours(refreshedTours);
+    } catch (err) {
+      console.error('Lỗi cập nhật tour:', err);
+      if (err.response?.status === 403 || err.response?.status === 401) {
+        // Token hết hạn, đã được xử lý bởi interceptor
+        return;
+      }
+      launchErrorToast(`Lỗi khi cập nhật tour: ${err.message || 'Không xác định'}`);
+    }
+  }
+};
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -1155,11 +1701,31 @@ function Tour() {
   console.log('🔍 RENDER SUPPLIER DEBUG:');
   console.log('  Tours loaded:', tours.length);
   console.log('  Suppliers loaded:', suppliers.length);
+  
+  // Debug all tours with supplier issues
+  const problematicTours = pagedTours.filter(tour => {
+    const supplierInfo = getSupplierInfo(tour.supplier_id);
+    return !supplierInfo.data || supplierInfo.name === 'Chưa có nhà cung cấp' || supplierInfo.name === 'Tên không xác định' || supplierInfo.name.includes('...');
+  });
+  
+  console.log('  Problematic tours count:', problematicTours.length);
+  problematicTours.slice(0, 5).forEach((tour, index) => {
+    console.log(`  🚨 Problem Tour ${index + 1}:`, {
+      tourName: tour.name,
+      supplierType: typeof tour.supplier_id,
+      supplierId: typeof tour.supplier_id === 'object' ? tour.supplier_id?._id : tour.supplier_id,
+      rawSupplierData: tour.supplier_id
+    });
+  });
+  
+  // Debug first 3 tours regardless
   pagedTours.slice(0, 3).forEach((tour, index) => {
+    const supplierInfo = getSupplierInfo(tour.supplier_id);
     console.log(`  Tour ${index + 1} supplier:`, {
       name: tour.name,
       supplierType: typeof tour.supplier_id,
-      supplierName: tour.supplier_id?.name || tour.supplier_id?.fullName || 'No name found'
+      supplierId: typeof tour.supplier_id === 'object' ? tour.supplier_id?._id : tour.supplier_id,
+      supplierName: supplierInfo?.name || 'No name found'
     });
   });
 
@@ -1229,12 +1795,12 @@ function Tour() {
                         <option key={cate._id} value={cate._id}>{cate.name}</option>
                       ))}
                     </select>
-                    <select value={selectedProvince} onChange={e => { setSelectedProvince(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2 mb-2">
+                    {/* <select value={selectedProvince} onChange={e => { setSelectedProvince(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2 mb-2">
                       <option value="">Tất cả địa điểm</option>
                       {provinceList.map(province => (
                         <option key={province} value={province}>{province}</option>
                       ))}
-                    </select>
+                    </select> */}
                   </div>
                   
                   {/* Row 2: Price filters */}
@@ -1348,6 +1914,14 @@ function Tour() {
                         setCurrentPage(1);
                         window.location.reload(); // Force refresh
                       }}>Reset & Refresh</button>
+                      <button className="btn btn-warning btn-sm" onClick={async () => {
+                        try {
+                          console.log('🔍 DEBUGGING TOUR DATA STRUCTURE...');
+                          await debugTourDataStructure();
+                        } catch (error) {
+                          console.error('Debug failed:', error);
+                        }
+                      }}>🔍 Debug Data Structure</button>
                     </div>
                   )}
                   {!userRole === 'supplier' && (
@@ -1359,6 +1933,14 @@ function Tour() {
                         setCurrentPage(1);
                         window.location.reload(); // Force refresh
                       }}>Reset & Refresh</button>
+                      <button className="btn btn-warning btn-sm" onClick={async () => {
+                        try {
+                          console.log('🔍 DEBUGGING TOUR DATA STRUCTURE...');
+                          await debugTourDataStructure();
+                        } catch (error) {
+                          console.error('Debug failed:', error);
+                        }
+                      }}>🔍 Debug Data Structure</button>
                     </div>
                   )}
                   {loading && <div>Đang tải dữ liệu...</div>}
@@ -1403,7 +1985,7 @@ function Tour() {
                                 </tr>
                               )}
                               {pagedTours.map((tour, index) => {
-                                console.log(`Rendering tour ${index}:`, tour.name);
+                                // console.log(`Rendering tour ${index}:`, tour.name);
                                 return (
                                   <tr key={`tour-${tour._id}-${index}`}>
                                     <td>{tour.name}</td>
@@ -1430,76 +2012,61 @@ function Tour() {
                                     {isAdmin() && (
                                       <td>
                                         {(() => {
-                                          // Clean supplier display logic
-                                          if (!tour.supplier_id) {
-                                            return (
-                                              <div className="text-muted">
-                                                <i className="fas fa-exclamation-triangle mr-1"></i>
-                                                Chưa có nhà cung cấp
-                                              </div>
-                                            );
-                                          }
+                                          const supplierInfo = getSupplierInfo(tour.supplier_id);
                                           
-                                          let supplierData = null;
-                                          let supplierName = '';
-                                          
-                                          // Handle string ID - find in suppliers list
-                                          if (typeof tour.supplier_id === 'string') {
-                                            supplierData = suppliers.find(sup => 
-                                              sup.id === tour.supplier_id || sup._id === tour.supplier_id
-                                            );
-                                            console.log('🔍 STRING ID LOOKUP:', tour.supplier_id, '→', supplierData?.name || 'Not found');
-                                          }
-                                          // Handle object (already populated)
-                                          else if (typeof tour.supplier_id === 'object' && tour.supplier_id !== null) {
-                                            supplierData = tour.supplier_id;
-                                            console.log('🔍 OBJECT SUPPLIER:', supplierData?.name || supplierData?.fullName || 'No name');
-                                          }
-                                          
-                                          if (supplierData) {
-                                            supplierName = supplierData.fullName || 
-                                                          `${supplierData.first_name || ''} ${supplierData.last_name || ''}`.trim() || 
-                                                          supplierData.name || 'Tên không xác định';
-                                            
-                                            return (
-                                              <div>
-                                                <div className="font-weight-bold text-success">
-                                                  {supplierName}
-                                                </div>
-                                                {supplierData.email && (
-                                                  <small className="text-muted">
-                                                    <i className="fas fa-envelope mr-1"></i>
-                                                    {supplierData.email}
-                                                  </small>
-                                                )}
-                                                {supplierData.phone && (
-                                                  <small className="text-muted d-block">
-                                                    <i className="fas fa-phone mr-1"></i>
-                                                    {supplierData.phone}
-                                                  </small>
-                                                )}
-                                              </div>
-                                            );
-                                          } else {
-                                            // Could not find supplier data
+                                          // supplierInfo luôn return object, kiểm tra name
+                                          if (!supplierInfo || !supplierInfo.data) {
                                             return (
                                               <div className="text-warning">
-                                                <i className="fas fa-search mr-1"></i>
-                                                ID: {typeof tour.supplier_id === 'string' ? tour.supplier_id : 'Invalid'}
-                                                <br />
-                                                <small className="text-muted">(Không tìm thấy thông tin supplier)</small>
+                                                <i className="fas fa-exclamation-triangle mr-1"></i>
+                                                {supplierInfo?.name || 'Chưa có nhà cung cấp'}
                                               </div>
                                             );
                                           }
+
+                                          return (
+                                            <div>
+                                              <div className="font-weight-bold text-success">
+                                                <i className="fas fa-building mr-1"></i>
+                                                {supplierInfo.name}
+                                              </div>
+                                              {supplierInfo.email && (
+                                                <small className="text-muted d-block">
+                                                  <i className="fas fa-envelope mr-1"></i>
+                                                  {supplierInfo.email}
+                                                </small>
+                                              )}
+                                              {supplierInfo.phone && (
+                                                <small className="text-muted d-block">
+                                                  <i className="fas fa-phone mr-1"></i>
+                                                  {supplierInfo.phone}
+                                                </small>
+                                              )}
+                                            </div>
+                                          );
                                         })()}
                                       </td>
                                     )}
                                     <td>
-                                      <button className="btn btn-info btn-sm mr-2" onClick={() => handleView(tour)}>
-                                        <i className="fas fa-eye mr-1"></i> Xem
-                                      </button>
-                                      {(userRole === 'supplier' || isAdmin()) && (
-                                        <button className="btn btn-warning btn-sm mr-2" onClick={() => handleEdit(tour)}>
+                                      {tour && tour._id && (
+                                        <button 
+                                          className="btn btn-info btn-sm mr-2" 
+                                          onClick={() => tour._id && handleView(tour)}
+                                        >
+                                          <i className="fas fa-eye mr-1"></i> Xem
+                                        </button>
+                                      )}
+                                      {(userRole === 'supplier' || isAdmin()) && tour && tour._id && (
+                                        <button 
+                                          className="btn btn-warning btn-sm mr-2" 
+                                          onClick={() => {
+                                            if (!tour || !tour._id) {
+                                              console.error('❌ Cannot edit: Invalid tour data');
+                                              return;
+                                            }
+                                            handleEdit(tour);
+                                          }}
+                                        >
                                           <i className="fas fa-edit mr-1"></i> Sửa
                                         </button>
                                       )}
@@ -1670,38 +2237,52 @@ function Tour() {
                       {isAdmin() && (
                         <div className="col-md-6 mb-2">
                           <b>Nhà cung cấp:</b> <span className="ml-1">
-                            {selectedTour.supplier_id ? (
-                              <div>
-                                <div className="font-weight-bold d-inline">
-                                  {`${selectedTour.supplier_id.first_name || ''} ${selectedTour.supplier_id.last_name || ''}`.trim() || 
-                                   selectedTour.supplier_id.name || 'Tên không xác định'}
+                            {(() => {
+                              const supplierInfo = getSupplierInfo(selectedTour.supplier_id);
+                              
+                              // supplierInfo luôn return object, check data field
+                              if (!supplierInfo || !supplierInfo.data) {
+                                return (
+                                  <span className="text-warning">
+                                    <i className="fas fa-exclamation-triangle mr-1"></i>
+                                    {supplierInfo?.name || 'Chưa có nhà cung cấp'}
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <div>
+                                  <div className="font-weight-bold d-inline text-success">
+                                    <i className="fas fa-building mr-1"></i>
+                                    {supplierInfo.name}
+                                  </div>
+                                  {supplierInfo.email && (
+                                    <div className="mt-1">
+                                      <small className="text-muted">
+                                        <i className="fas fa-envelope mr-1"></i>
+                                        Email: {supplierInfo.email}
+                                      </small>
+                                    </div>
+                                  )}
+                                  {supplierInfo.phone && (
+                                    <div className="mt-1">
+                                      <small className="text-muted">
+                                        <i className="fas fa-phone mr-1"></i>
+                                        Điện thoại: {supplierInfo.phone}
+                                      </small>
+                                    </div>
+                                  )}
+                                  {supplierInfo.data?.address && (
+                                    <div className="mt-1">
+                                      <small className="text-muted">
+                                        <i className="fas fa-map-marker-alt mr-1"></i>
+                                        Địa chỉ: {supplierInfo.data.address}
+                                      </small>
+                                    </div>
+                                  )}
                                 </div>
-                                {selectedTour.supplier_id.email && (
-                                  <div className="mt-1">
-                                    <small className="text-muted">
-                                      <i className="fas fa-envelope mr-1"></i>
-                                      Email: {selectedTour.supplier_id.email}
-                                    </small>
-                                  </div>
-                                )}
-                                {selectedTour.supplier_id.phone && (
-                                  <div className="mt-1">
-                                    <small className="text-muted">
-                                      <i className="fas fa-phone mr-1"></i>
-                                      Điện thoại: {selectedTour.supplier_id.phone}
-                                    </small>
-                                  </div>
-                                )}
-                                {selectedTour.supplier_id.address && (
-                                  <div className="mt-1">
-                                    <small className="text-muted">
-                                      <i className="fas fa-map-marker-alt mr-1"></i>
-                                      Địa chỉ: {selectedTour.supplier_id.address}
-                                    </small>
-                                  </div>
-                                )}
-                              </div>
-                            ) : 'N/A'}
+                              );
+                            })()}
                           </span>
                         </div>
                       )}
@@ -1924,7 +2505,7 @@ function Tour() {
                         </div>
                         
                         {/* Supplier selector - chỉ hiển thị cho admin */}
-                        {isAdmin() && (
+                        {/* {isAdmin() && (
                           <div className="form-group">
                             <label>
                               <i className="fas fa-building mr-1"></i>
@@ -1980,7 +2561,78 @@ function Tour() {
                               Chọn nhà cung cấp sở hữu tour này
                             </small>
                           </div>
-                        )}
+                        )} */}
+                        {isAdmin() && (
+  <div className="form-group">
+    <label><i className="fas fa-building mr-1"></i>Nhà cung cấp</label>
+    <select 
+      className="form-control bg-light" 
+      name="supplier_id" 
+      value={(() => {
+        const value = form.supplier_id || '';
+        console.log('🔍 DROPDOWN DEBUG - Current form.supplier_id:', value, typeof value);
+        console.log('🔍 DROPDOWN DEBUG - Available suppliers:', suppliers.map(s => ({
+          _id: s._id,
+          id: s.id,
+          name: s.name || s.fullName
+        })));
+        return value;
+      })()} 
+      onChange={handleFormChange} 
+      required
+    >
+      <option value="">-- Chọn nhà cung cấp --</option>
+      {suppliers.map(supplier => {
+        const supplierId = supplier._id || supplier.id;
+        const supplierName = supplier.fullName || 
+          supplier.companyName || 
+          supplier.company_name ||
+          `${supplier.first_name || ''} ${supplier.last_name || ''}`.trim() || 
+          `${supplier.firstName || ''} ${supplier.lastName || ''}`.trim() || 
+          supplier.name ||
+          supplier.businessName || 
+          supplier.username ||
+          supplier.title ||
+          supplier.displayName ||
+          supplier.organizationName ||
+          supplier._id ||
+          supplier.id ||
+          'Tên không xác định';
+        const isSelected = (form.supplier_id || '') === supplierId;
+        
+        if (isSelected) {
+          console.log('🎯 SELECTED OPTION:', {
+            supplierId,
+            supplierName,
+            formValue: form.supplier_id
+          });
+        }
+        
+        return (
+          <option key={supplierId} value={supplierId}>
+            {supplierName} {supplier.email && `(${supplier.email})`}
+          </option>
+        );
+      })}
+    </select>
+  </div>
+)}
+{userRole === 'supplier' && (
+  <div className="form-group">
+    <label><i className="fas fa-building mr-1"></i>Nhà cung cấp</label>
+    <input 
+      type="text" 
+      className="form-control bg-light" 
+      value={suppliers.find(s => s._id === currentUser._id)?.fullName || 'Bạn'} 
+      disabled 
+    />
+    <input 
+      type="hidden" 
+      name="supplier_id" 
+      value={currentUser._id || ''} 
+    />
+  </div>
+)}
                         <div className="form-row">
                           <div className="form-group col-md-6">
                             <label><i className="fas fa-clock mr-1" />Giờ mở cửa</label>

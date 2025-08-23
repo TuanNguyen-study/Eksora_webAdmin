@@ -135,6 +135,119 @@ function AddTour() {
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  // Find nearby known location from our database
+  const findNearbyKnownLocation = useCallback((lat, lng) => {
+    const knownLocations = [
+      { name: 'Hà Nội', lat: 21.0285, lng: 105.8542 },
+      { name: 'Hồ Chí Minh', lat: 10.8231, lng: 106.6297 },
+      { name: 'Đà Nẵng', lat: 16.0544, lng: 108.2022 },
+      { name: 'Cần Thơ', lat: 10.0452, lng: 105.7469 },
+      { name: 'Hải Phòng', lat: 20.8449, lng: 106.6881 },
+      { name: 'Đà Lạt', lat: 11.9404, lng: 108.4583 },
+      { name: 'Nha Trang', lat: 12.2388, lng: 109.1967 },
+      { name: 'Hội An', lat: 15.8801, lng: 108.3380 },
+      { name: 'Hạ Long', lat: 20.9101, lng: 107.1839 },
+      { name: 'Vũng Tàu', lat: 10.4113, lng: 107.1362 },
+      { name: 'Phú Quốc', lat: 10.2899, lng: 103.9840 },
+      { name: 'Sa Pa', lat: 22.3364, lng: 103.8438 }
+    ];
+
+    let nearest = null;
+    let minDistance = Infinity;
+
+    knownLocations.forEach(location => {
+      const distance = Math.sqrt(
+        Math.pow(lat - location.lat, 2) + Math.pow(lng - location.lng, 2)
+      );
+      if (distance < minDistance && distance < 1.0) { // Within ~111km
+        minDistance = distance;
+        nearest = location;
+      }
+    });
+
+    return nearest;
+  }, []);
+
+  // Get general location context based on coordinates
+  const getLocationContext = useCallback((lat, lng) => {
+    // Northern Vietnam
+    if (lat > 20) {
+      return 'Miền Bắc Việt Nam';
+    }
+    // Central Vietnam
+    else if (lat > 12) {
+      return 'Miền Trung Việt Nam';
+    }
+    // Southern Vietnam
+    else {
+      return 'Miền Nam Việt Nam';
+    }
+  }, []);
+
+  // Improved reverse geocoding with multiple fallback strategies
+  const performReverseGeocoding = useCallback(async (lat, lng) => {
+    try {
+      // Strategy 1: Use CodeTabs proxy
+      const response = await fetch(
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=vi,en`)}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.display_name) {
+          const input = document.getElementById('location-input');
+          if (input) input.value = data.display_name;
+          setForm(f => ({ ...f, location: data.display_name }));
+          return;
+        }
+      }
+    } catch (error) {
+      console.log('CodeTabs reverse geocoding failed, trying AllOrigins...');
+    }
+
+    try {
+      // Strategy 2: Use AllOrigins proxy
+      const proxyResponse = await fetch(
+        `https://api.allorigins.win/get?url=${encodeURIComponent(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=vi,en`)}`
+      );
+      
+      if (proxyResponse.ok) {
+        const result = await proxyResponse.json();
+        const data = JSON.parse(result.contents);
+        
+        if (data.display_name) {
+          const input = document.getElementById('location-input');
+          if (input) input.value = data.display_name;
+          setForm(f => ({ ...f, location: data.display_name }));
+          return;
+        }
+      }
+    } catch (error) {
+      console.log('AllOrigins reverse geocoding failed...');
+    }
+
+    try {
+      // Strategy 3: Try to find nearby known location from our database
+      const nearbyLocation = findNearbyKnownLocation(lat, lng);
+      if (nearbyLocation) {
+        const locationText = `${nearbyLocation.name} (ước tính)`;
+        const input = document.getElementById('location-input');
+        if (input) input.value = locationText;
+        setForm(f => ({ ...f, location: locationText }));
+        return;
+      }
+    } catch (error) {
+      console.log('Nearby location lookup failed...');
+    }
+
+    // Fallback: Use coordinates with location context
+    const locationContext = getLocationContext(lat, lng);
+    const locationText = `${locationContext} - Tọa độ: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const input = document.getElementById('location-input');
+    if (input) input.value = locationText;
+    setForm(f => ({ ...f, location: locationText }));
+  }, [findNearbyKnownLocation, getLocationContext]);
+
   // Initialize OpenStreetMap với Leaflet - improved version
   const initializeMap = useCallback(async () => {
     console.log('=== MAP INITIALIZATION DEBUG ===');
@@ -266,120 +379,7 @@ function AddTour() {
     } finally {
       setIsInitializingMap(false);
     }
-  }, [form.lat, form.lng, isInitializingMap]);
-
-  // Improved reverse geocoding with multiple fallback strategies
-  const performReverseGeocoding = async (lat, lng) => {
-    try {
-      // Strategy 1: Use CodeTabs proxy
-      const response = await fetch(
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=vi,en`)}`
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.display_name) {
-          const input = document.getElementById('location-input');
-          if (input) input.value = data.display_name;
-          setForm(f => ({ ...f, location: data.display_name }));
-          return;
-        }
-      }
-    } catch (error) {
-      console.log('CodeTabs reverse geocoding failed, trying AllOrigins...');
-    }
-
-    try {
-      // Strategy 2: Use AllOrigins proxy
-      const proxyResponse = await fetch(
-        `https://api.allorigins.win/get?url=${encodeURIComponent(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=vi,en`)}`
-      );
-      
-      if (proxyResponse.ok) {
-        const result = await proxyResponse.json();
-        const data = JSON.parse(result.contents);
-        
-        if (data.display_name) {
-          const input = document.getElementById('location-input');
-          if (input) input.value = data.display_name;
-          setForm(f => ({ ...f, location: data.display_name }));
-          return;
-        }
-      }
-    } catch (error) {
-      console.log('AllOrigins reverse geocoding failed...');
-    }
-
-    try {
-      // Strategy 3: Try to find nearby known location from our database
-      const nearbyLocation = findNearbyKnownLocation(lat, lng);
-      if (nearbyLocation) {
-        const locationText = `${nearbyLocation.name} (ước tính)`;
-        const input = document.getElementById('location-input');
-        if (input) input.value = locationText;
-        setForm(f => ({ ...f, location: locationText }));
-        return;
-      }
-    } catch (error) {
-      console.log('Nearby location lookup failed...');
-    }
-
-    // Fallback: Use coordinates with location context
-    const locationContext = getLocationContext(lat, lng);
-    const locationText = `${locationContext} - Tọa độ: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    const input = document.getElementById('location-input');
-    if (input) input.value = locationText;
-    setForm(f => ({ ...f, location: locationText }));
-  };
-
-  // Find nearby known location from our database
-  const findNearbyKnownLocation = (lat, lng) => {
-    const knownLocations = [
-      { name: 'Hà Nội', lat: 21.0285, lng: 105.8542 },
-      { name: 'Hồ Chí Minh', lat: 10.8231, lng: 106.6297 },
-      { name: 'Đà Nẵng', lat: 16.0544, lng: 108.2022 },
-      { name: 'Cần Thơ', lat: 10.0452, lng: 105.7469 },
-      { name: 'Hải Phòng', lat: 20.8449, lng: 106.6881 },
-      { name: 'Đà Lạt', lat: 11.9404, lng: 108.4583 },
-      { name: 'Nha Trang', lat: 12.2388, lng: 109.1967 },
-      { name: 'Hội An', lat: 15.8801, lng: 108.3380 },
-      { name: 'Hạ Long', lat: 20.9101, lng: 107.1839 },
-      { name: 'Vũng Tàu', lat: 10.4113, lng: 107.1362 },
-      { name: 'Phú Quốc', lat: 10.2899, lng: 103.9840 },
-      { name: 'Sa Pa', lat: 22.3364, lng: 103.8438 }
-    ];
-
-    let nearest = null;
-    let minDistance = Infinity;
-
-    knownLocations.forEach(location => {
-      const distance = Math.sqrt(
-        Math.pow(lat - location.lat, 2) + Math.pow(lng - location.lng, 2)
-      );
-      if (distance < minDistance && distance < 1.0) { // Within ~111km
-        minDistance = distance;
-        nearest = location;
-      }
-    });
-
-    return nearest;
-  };
-
-  // Get general location context based on coordinates
-  const getLocationContext = (lat, lng) => {
-    // Northern Vietnam
-    if (lat > 20) {
-      return 'Miền Bắc Việt Nam';
-    }
-    // Central Vietnam
-    else if (lat > 12) {
-      return 'Miền Trung Việt Nam';
-    }
-    // Southern Vietnam
-    else {
-      return 'Miền Nam Việt Nam';
-    }
-  };
+  }, [form.lat, form.lng, performReverseGeocoding]);
 
   useEffect(() => {
     console.log('=== MAP useEffect DEBUG ===');
@@ -814,6 +814,9 @@ function AddTour() {
           case error.TIMEOUT:
             errorMessage = 'Yêu cầu định vị quá thời gian.';
             break;
+          default:
+            errorMessage = 'Lỗi không xác định khi lấy vị trí.';
+            break;
         }
         alert('❌ ' + errorMessage);
       },
@@ -852,7 +855,6 @@ function AddTour() {
   
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [editingDescription, setEditingDescription] = useState(false);
   const [userRole, setUserRole] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -917,6 +919,7 @@ function AddTour() {
       const { name, value } = e.target;
       // Clear missing field on change
       setMissingFields(prev => ({ ...prev, [name]: false }));
+      
       if (name.startsWith('cateID.')) {
         setForm({ ...form, cateID: { ...form.cateID, [name.split('.')[1]]: value } });
       } else if (name === 'image') {
@@ -930,6 +933,31 @@ function AddTour() {
       } else if (name === 'location') {
         // Handle location input for geocoding
         setForm({ ...form, [name]: value });
+      } else if (name === 'opening_time' || name === 'closing_time') {
+        // Handle time validation
+        const updatedForm = { ...form, [name]: value };
+        setForm(updatedForm);
+        
+        // Real-time validation for time
+        if (updatedForm.opening_time && updatedForm.closing_time) {
+          const openTime = new Date(`1970-01-01T${updatedForm.opening_time}:00`);
+          const closeTime = new Date(`1970-01-01T${updatedForm.closing_time}:00`);
+          
+          if (openTime >= closeTime) {
+            setMissingFields(prev => ({ 
+              ...prev, 
+              opening_time: true, 
+              closing_time: true 
+            }));
+          } else {
+            // Clear time validation errors if times are valid
+            setMissingFields(prev => ({ 
+              ...prev, 
+              opening_time: false, 
+              closing_time: false 
+            }));
+          }
+        }
       } else {
         setForm({ ...form, [name]: value });
       }
@@ -1045,6 +1073,22 @@ function AddTour() {
         document.getElementsByName(first.name)[0].focus();
       }
       return;
+    }
+    
+    // Validate time: opening_time should be less than closing_time
+    if (form.opening_time && form.closing_time) {
+      const openTime = new Date(`1970-01-01T${form.opening_time}:00`);
+      const closeTime = new Date(`1970-01-01T${form.closing_time}:00`);
+      
+      if (openTime >= closeTime) {
+        alert('Giờ mở cửa phải nhỏ hơn giờ đóng cửa!');
+        setMissingFields(prev => ({ 
+          ...prev, 
+          opening_time: true, 
+          closing_time: true 
+        }));
+        return;
+      }
     }
     
     // Validate services với structure mới
@@ -1349,12 +1393,13 @@ function AddTour() {
               style={{ fontWeight: 500 }}
             />
             {missingFields.name && <div style={{color:'red', fontSize:13, marginTop:-12, marginBottom:8}}>Cần nhập thông tin</div>}
-            <div className="mb-3" style={{ minHeight: 700, maxHeight: 700, overflowY: 'auto', border: '1px solid #e0e0e0', borderRadius: 4 }}>
+            <div className="mb-3" style={{ minHeight: 550, maxHeight: 650, overflowY: 'auto', border: '1px solid #e0e0e0', borderRadius: 4 }}>
               <p className="font-weight-bold mb-2">Mô tả chi tiết</p>
               <CkeditorField
                 name="description"
                 value={form.description}
                 onChange={handleFormChange}
+                height={500}
               />
               {missingFields.description && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
             </div>
@@ -1831,13 +1876,25 @@ function AddTour() {
               <div className="form-group col-md-6">
                 <label>Giờ mở cửa</label>
                 <input type="time" className="form-control bg-light" name="opening_time" value={form.opening_time || ''} onChange={handleFormChange} required />
-                {missingFields.opening_time && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+                {missingFields.opening_time && (
+                  <div style={{color:'red', fontSize:13, marginTop:4}}>
+                    {form.opening_time && form.closing_time && form.opening_time >= form.closing_time 
+                      ? 'Giờ mở cửa phải nhỏ hơn giờ đóng cửa' 
+                      : 'Cần nhập thông tin'}
+                  </div>
+                )}
                 <small className="text-muted">Nhập giờ mở cửa của tour</small>
               </div>
               <div className="form-group col-md-6">
                 <label>Giờ đóng cửa</label>
                 <input type="time" className="form-control bg-light" name="closing_time" value={form.closing_time || ''} onChange={handleFormChange} required />
-                {missingFields.closing_time && <div style={{color:'red', fontSize:13, marginTop:4}}>Cần nhập thông tin</div>}
+                {missingFields.closing_time && (
+                  <div style={{color:'red', fontSize:13, marginTop:4}}>
+                    {form.opening_time && form.closing_time && form.opening_time >= form.closing_time 
+                      ? 'Giờ đóng cửa phải lớn hơn giờ mở cửa' 
+                      : 'Cần nhập thông tin'}
+                  </div>
+                )}
                 <small className="text-muted">Nhập giờ đóng cửa của tour</small>
               </div>
             </div>

@@ -94,7 +94,7 @@ function CreateSupplier() {
     }
 
     // Kiểm tra không có ký tự đặc biệt (yêu cầu đặc biệt)
-    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(password);
     
     // Đánh giá điểm số và phản hồi
     if (score === 4 && !hasSpecialChar && password.length >= 8) {
@@ -166,7 +166,7 @@ function CreateSupplier() {
       newErrors.password = 'Mật khẩu là bắt buộc';
     } else {
       const strength = checkPasswordStrength(form.password);
-      if (strength.score < 4 || /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(form.password)) {
+      if (strength.score < 4 || /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(form.password)) {
         newErrors.password = 'Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và không có ký tự đặc biệt';
       }
     }

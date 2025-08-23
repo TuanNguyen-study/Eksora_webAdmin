@@ -46,3 +46,156 @@ code {
     height: 300px !important;
   }
 }
+
+/* Dashboard responsive styles */
+@media (max-width: 1200px) {
+  /* Large screens adjustments */
+  .info-box {
+    min-height: auto !important;
+  }
+
+  .info-box-content {
+    padding: 5px 10px !important;
+  }
+
+  .info-box-number {
+    font-size: 1.5rem !important;
+  }
+}
+
+@media (max-width: 992px) {
+  /* Medium screens adjustments */
+  .info-box-number {
+    font-size: 1.3rem !important;
+  }
+
+  .info-box-text {
+    font-size: 0.9rem !important;
+  }
+
+  /* Chart containers */
+  .card-body canvas {
+    max-height: 250px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Small screens adjustments */
+  .info-box {
+    margin-bottom: 1rem !important;
+  }
+
+  .info-box-icon {
+    width: 60px !important;
+    height: 60px !important;
+    line-height: 60px !important;
+  }
+
+  .info-box-icon i {
+    font-size: 1.5rem !important;
+  }
+
+  .info-box-number {
+    font-size: 1.2rem !important;
+  }
+
+  .info-box-text {
+    font-size: 0.85rem !important;
+  }
+
+  /* Chart responsive */
+  .card-body canvas {
+    max-height: 200px !important;
+  }
+
+  /* Description blocks */
+  .description-block {
+    margin-bottom: 1rem !important;
+    text-align: center !important;
+    border-right: none !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    padding-bottom: 1rem !important;
+  }
+
+  .description-block:last-child {
+    border-bottom: none !important;
+  }
+}
+
+@media (max-width: 576px) {
+  /* Extra small screens */
+  .content-header h1 {
+    font-size: 1.5rem !important;
+  }
+
+  .info-box {
+    text-align: center !important;
+  }
+
+  .info-box-icon {
+    float: none !important;
+    width: 50px !important;
+    height: 50px !important;
+    line-height: 50px !important;
+    margin: 0 auto 10px !important;
+  }
+
+  .info-box-content {
+    margin-left: 0 !important;
+    text-align: center !important;
+  }
+
+  /* Badges responsive */
+  .badge {
+    display: block !important;
+    margin: 5px 0 !important;
+    padding: 8px !important;
+    font-size: 0.9rem !important;
+  }
+
+  /* Table responsive improvements */
+  .table-responsive {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 0.375rem !important;
+  }
+
+  .table th,
+  .table td {
+    padding: 0.5rem !important;
+    font-size: 0.85rem !important;
+  }
+}
+
+/* Fix for chart containers to maintain aspect ratio */
+.chart-container {
+  position: relative !important;
+  height: auto !important;
+  width: 100% !important;
+}
+
+.chart-container canvas {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* Prevent horizontal scrolling on small screens */
+.container-fluid {
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+.row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.col-12,
+.col-sm-6,
+.col-md-3,
+.col-md-6,
+.col-lg-6,
+.col-lg-8,
+.col-lg-4 {
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}

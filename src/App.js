@@ -14,6 +14,7 @@ import Reviews from './components/Reviews';
 import Login from './pages/Login';
 import AddTour from './pages/AddTour';
 import CreateSupplier from './pages/CreateSupplier';
+import SupplierAnalytics from './pages/SupplierAnalytics';
 import Toast from './components/Toast';
 
 function App() {
@@ -73,6 +74,7 @@ function App() {
                   <Route path="/calendar" element={<Calendar />} />
                   <Route path="/reviews" element={<Reviews />} />
                   <Route path="/suppliers/create" element={<CreateSupplier />} />
+                  <Route path="/suppliers/analytics" element={<SupplierAnalytics />} />
                   {/* Redirect tất cả route không hợp lệ về dashboard */}
                   <Route path="*" element={<Home />} />
                 </Routes>

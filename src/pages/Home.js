@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { getTours, getAllBookings, getAllUsers, getReviews, getSuppliers, getCategories } from '../api/api';
+import { getTours, getAllBookings, getAllUsers, getReviews, getCategories } from '../api/api';
 import Calendar from './SimpleCalendar';
 import LastestReview from '../components/LastestReview';
 import VietnamMap from '../components/VietnamMap';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Chart, BarElement, CategoryScale, LinearScale, Tooltip, Legend, PointElement, LineElement, ArcElement } from 'chart.js';
 Chart.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend, PointElement, LineElement, ArcElement);
-const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=dee2e6&color=495057&size=128';
 
 function Home() {
   const [recentTours, setRecentTours] = useState([]);
@@ -33,6 +32,9 @@ function Home() {
   const [hotDestinations, setHotDestinations] = useState([]);
   const [categoryBookingData, setCategoryBookingData] = useState([]);
   const [mapChartData, setMapChartData] = useState(null);
+  
+  // State for responsive handling
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
 
   // Helper functions for hot destinations
@@ -112,6 +114,21 @@ function Home() {
     }
     fetchRecentTours();
   }, []);
+  
+  // useEffect for responsive handling
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    
+    // Cleanup function
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+  
   useEffect(() => {
     async function fetchLatestBookings() {
       try {
@@ -411,16 +428,17 @@ function Home() {
 
         console.log('hotDestinationsData final:', hotDestinationsData);
         
-        // If no real data, add some demo data for testing
+        // Always ensure we have at least demo data for regions
+        let finalDestinationsForRegion = hotDestinationsData;
         if (hotDestinationsData.length === 0) {
           console.log('No booking data found, adding demo destinations');
           const demoDestinations = [
             {
               categoryId: 'demo1',
               categoryName: 'Thành phố Hồ Chí Minh',
-              bookingCount: 0,
-              totalGuests: 0,
-              totalRevenue: 0,
+              bookingCount: 6,
+              totalGuests: 12,
+              totalRevenue: 15000000,
               icon: 'fas fa-city',
               region: 'Miền Nam',
               province: 'TP.HCM',
@@ -430,26 +448,64 @@ function Home() {
             {
               categoryId: 'demo2', 
               categoryName: 'Hà Nội',
-              bookingCount: 0,
-              totalGuests: 0,
-              totalRevenue: 0,
+              bookingCount: 19,
+              totalGuests: 38,
+              totalRevenue: 45000000,
               icon: 'fas fa-landmark',
               region: 'Miền Bắc',
               province: 'Hà Nội',
               coordinates: [21.0285, 105.8542],
               randomImage: null
+            },
+            {
+              categoryId: 'demo3', 
+              categoryName: 'Đà Nẵng',
+              bookingCount: 25,
+              totalGuests: 50,
+              totalRevenue: 60000000,
+              icon: 'fas fa-water',
+              region: 'Miền Trung',
+              province: 'Đà Nẵng',
+              coordinates: [16.0544, 108.2022],
+              randomImage: null
+            },
+            {
+              categoryId: 'demo4', 
+              categoryName: 'Quảng Nam',
+              bookingCount: 15,
+              totalGuests: 30,
+              totalRevenue: 35000000,
+              icon: 'fas fa-mountain',
+              region: 'Miền Trung',
+              province: 'Quảng Nam',
+              coordinates: [15.5394, 108.0191],
+              randomImage: null
+            },
+            {
+              categoryId: 'demo5', 
+              categoryName: 'Khánh Hòa',
+              bookingCount: 16,
+              totalGuests: 32,
+              totalRevenue: 40000000,
+              icon: 'fas fa-umbrella-beach',
+              region: 'Miền Trung',
+              province: 'Khánh Hòa',
+              coordinates: [12.2585, 109.0526],
+              randomImage: null
             }
           ];
           setHotDestinations(demoDestinations);
+          finalDestinationsForRegion = demoDestinations;
         } else {
           setHotDestinations(hotDestinationsData);
+          finalDestinationsForRegion = hotDestinationsData;
         }
         
         setCategoryBookingData(Object.values(categoryBookings));
 
         // Create enhanced map chart data with regional information
         const regionStats = {};
-        hotDestinationsData.forEach(dest => {
+        finalDestinationsForRegion.forEach(dest => {
           if (!regionStats[dest.region]) {
             regionStats[dest.region] = {
               region: dest.region,
@@ -548,7 +604,7 @@ function Home() {
               </div>{/* /.col */}
               <div className="col-sm-6">
                 <ol className="breadcrumb float-sm-right bg-light">
-                  <li className="breadcrumb-item"><a href="#" className="text-dark">Home</a></li>
+                  <li className="breadcrumb-item"><button type="button" className="btn btn-link p-0 text-dark border-0 bg-transparent">Home</button></li>
                   <li className="breadcrumb-item active text-dark">Dashboard </li>
                 </ol>
               </div>{/* /.col */}
@@ -615,11 +671,11 @@ function Home() {
                           <i className="fas fa-wrench" />
                         </button>
                         <div className="dropdown-menu dropdown-menu-right bg-white" role="menu">
-                          <a href="#" className="dropdown-item text-dark">Action</a>
-                          <a href="#" className="dropdown-item text-dark">Another action</a>
-                          <a href="#" className="dropdown-item text-dark">Something else here</a>
-                          <a className="dropdown-divider" />
-                          <a href="#" className="dropdown-item text-dark">Separated link</a>
+                          <button type="button" className="dropdown-item text-dark border-0 bg-transparent">Action</button>
+                          <button type="button" className="dropdown-item text-dark border-0 bg-transparent">Another action</button>
+                          <button type="button" className="dropdown-item text-dark border-0 bg-transparent">Something else here</button>
+                          <div className="dropdown-divider" />
+                          <button type="button" className="dropdown-item text-dark border-0 bg-transparent">Separated link</button>
                         </div>
                       </div>
                       <button type="button" className="btn btn-tool text-dark" data-card-widget="remove">
@@ -631,23 +687,30 @@ function Home() {
                   <div className="card-body">
                     <div className="row">
                       <div className="col-md-9">
-                        <div className=" justify-content-center align-items-center mb-2">
-                          <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} className="form-control w-auto mx-2">
-                            {[...Array(12)].map((_, i) => (
-                              <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>
-                            ))}
-                          </select>
-                          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="form-control w-auto mx-2">
-                            {[...Array(6)].map((_, i) => {
-                              const year = new Date().getFullYear() - 3 + i;
-                              return <option key={year} value={year}>{year}</option>;
-                            })}
-                          </select>
+                        <div className="text-center mb-3">
+                          <h4 className="text-primary font-weight-bold mb-3">
+                            <i className="fas fa-chart-line mr-2"></i>
+                            Thống Kê Booking & Doanh Thu
+                          </h4>
+                          <div className="d-flex justify-content-center align-items-center mb-3">
+                            <label className="mb-0 mr-2 font-weight-bold">Tháng:</label>
+                            <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} 
+                              className="form-control w-auto mx-2" style={{borderRadius: '20px'}}>
+                              {[...Array(12)].map((_, i) => (
+                                <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>
+                              ))}
+                            </select>
+                            <label className="mb-0 mr-2 font-weight-bold">Năm:</label>
+                            <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} 
+                              className="form-control w-auto mx-2" style={{borderRadius: '20px'}}>
+                              {[...Array(6)].map((_, i) => {
+                                const year = new Date().getFullYear() - 3 + i;
+                                return <option key={year} value={year}>{year}</option>;
+                              })}
+                            </select>
+                          </div>
                         </div>
-                        <p className="text-center">
-                          <strong>Booking trong tháng {selectedMonth}/{selectedYear}</strong>
-                        </p>
-                        <div className="chart">
+                        <div className="chart chart-container">
                           {chartLoading ? (
                             <div className="text-center py-5"><span>Đang tải biểu đồ...</span></div>
                           ) : (
@@ -658,82 +721,170 @@ function Home() {
                                   {
                                     label: 'Số booking đang có',
                                     data: monthlyBookingStats.bookingActiveCounts,
-                                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
                                     borderColor: 'rgba(54, 162, 235, 1)',
-                                    borderWidth: 2,
-                                    pointRadius: 7,
+                                    borderWidth: 3,
+                                    pointRadius: 6,
+                                    pointHoverRadius: 8,
                                     pointBackgroundColor: 'rgba(54, 162, 235, 1)',
                                     pointBorderColor: '#fff',
+                                    pointBorderWidth: 2,
                                     fill: false,
                                     yAxisID: 'y',
-                                    tension: 0.2,
+                                    tension: 0.3,
                                     showLine: true,
                                   },
                                   {
                                     label: 'Doanh thu (VNĐ)',
                                     data: monthlyBookingStats.revenueCounts,
-                                    backgroundColor: 'rgba(255, 206, 86, 0.5)',
-                                    borderColor: 'rgba(255, 206, 86, 1)',
-                                    borderWidth: 2,
-                                    pointRadius: 0,
+                                    backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                                    borderColor: 'rgba(255, 193, 7, 1)',
+                                    borderWidth: 3,
+                                    pointRadius: 5,
+                                    pointHoverRadius: 7,
+                                    pointBackgroundColor: 'rgba(255, 193, 7, 1)',
+                                    pointBorderColor: '#fff',
+                                    pointBorderWidth: 2,
                                     fill: false,
                                     yAxisID: 'y1',
-                                    tension: 0.2,
+                                    tension: 0.3,
                                     showLine: true,
                                   },
                                 ],
                               }}
                               options={{
                                 responsive: true,
-                                plugins: {
-                                  legend: { display: true },
-                                  tooltip: { enabled: true },
+                                maintainAspectRatio: false,
+                                interaction: {
+                                  mode: 'index',
+                                  intersect: false,
                                 },
-                                scales: {
-                                  x: { title: { display: true, text: 'Ngày trong tháng' } },
-                                  y: {
-                                    title: { display: true, text: 'Số lượng Booking đang có' },
-                                    beginAtZero: true,
-                                    position: 'left',
+                                plugins: {
+                                  legend: { 
+                                    display: true,
+                                    position: 'top',
+                                    labels: {
+                                      boxWidth: 15,
+                                      padding: 20,
+                                      font: {
+                                        size: 12,
+                                        weight: 'bold'
+                                      },
+                                      color: '#333'
+                                    }
                                   },
-                                  y1: {
-                                    title: { display: true, text: 'Doanh thu (VNĐ)' },
-                                    beginAtZero: true,
-                                    position: 'right',
-                                    grid: { drawOnChartArea: false },
-                                    ticks: {
-                                      callback: function(value) {
-                                        return value.toLocaleString();
+                                  tooltip: { 
+                                    enabled: true,
+                                    backgroundColor: 'rgba(0,0,0,0.8)',
+                                    titleFont: { size: 14 },
+                                    bodyFont: { size: 12 },
+                                    padding: 12,
+                                    cornerRadius: 8,
+                                    callbacks: {
+                                      label: function(context) {
+                                        if (context.datasetIndex === 1) {
+                                          return context.dataset.label + ': ' + context.parsed.y.toLocaleString('vi-VN') + ' VNĐ';
+                                        }
+                                        return context.dataset.label + ': ' + context.parsed.y;
                                       }
                                     }
                                   },
                                 },
+                                scales: {
+                                  x: { 
+                                    title: { 
+                                      display: windowWidth > 768, 
+                                      text: 'Ngày trong tháng',
+                                      font: { size: 12, weight: 'bold' },
+                                      color: '#666'
+                                    },
+                                    ticks: {
+                                      maxTicksLimit: windowWidth > 768 ? 15 : 8,
+                                      font: { size: 11 },
+                                      color: '#666'
+                                    },
+                                    grid: {
+                                      display: true,
+                                      color: 'rgba(0,0,0,0.1)'
+                                    }
+                                  },
+                                  y: {
+                                    title: { 
+                                      display: windowWidth > 768, 
+                                      text: 'Số lượng Booking đang có',
+                                      font: { size: 12, weight: 'bold' },
+                                      color: '#2196F3'
+                                    },
+                                    beginAtZero: true,
+                                    position: 'left',
+                                    ticks: {
+                                      font: { size: 11 },
+                                      color: '#2196F3',
+                                      stepSize: 1
+                                    },
+                                    grid: {
+                                      display: true,
+                                      color: 'rgba(33,150,243,0.2)'
+                                    }
+                                  },
+                                  y1: {
+                                    title: { 
+                                      display: windowWidth > 768, 
+                                      text: 'Doanh thu (VNĐ)',
+                                      font: { size: 12, weight: 'bold' },
+                                      color: '#FF9800'
+                                    },
+                                    beginAtZero: true,
+                                    position: 'right',
+                                    ticks: {
+                                      font: { size: 11 },
+                                      color: '#FF9800',
+                                      callback: function(value) {
+                                        return value.toLocaleString('vi-VN');
+                                      }
+                                    },
+                                    grid: { 
+                                      drawOnChartArea: false,
+                                      color: 'rgba(255,152,0,0.2)'
+                                    },
+                                  },
+                                },
                               }}
-                              height={180}
+                              height={windowWidth > 768 ? 300 : 200}
                             />
                           )}
                         </div>
-                        <div className="text-center mt-2">
-                          <span className="badge badge-info" style={{fontSize: '1.1rem'}}>
-                            Tổng số Booking tháng này: {(() => {
-                              // Lấy lại dữ liệu booking từ allBookings theo tháng/năm đang chọn
+                        <div className="text-center mt-3 d-flex flex-wrap justify-content-center">
+                          <div className="badge badge-info m-2 p-3" style={{
+                            fontSize: windowWidth > 576 ? '1.2rem' : '1rem',
+                            fontWeight: 'bold',
+                            borderRadius: '10px',
+                            boxShadow: '0 2px 8px rgba(33,150,243,0.3)'
+                          }}>
+                            <i className="fas fa-calendar-check mr-2"></i>
+                            Booking tháng này: <strong>{(() => {
                               const count = allBookings.filter(b => {
                                 const d = new Date(b.createdAt || b.booking_date);
                                 return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
                               }).length;
                               return count;
-                            })()}
-                          </span>
-                          <span className="badge badge-warning ml-2" style={{fontSize: '1.1rem'}}>
-                            Tổng doanh thu: {(() => {
-                              // Lấy lại doanh thu booking đã thanh toán theo tháng/năm đang chọn
+                            })()}</strong>
+                          </div>
+                          <div className="badge badge-warning m-2 p-3" style={{
+                            fontSize: windowWidth > 576 ? '1.2rem' : '1rem',
+                            fontWeight: 'bold',
+                            borderRadius: '10px',
+                            boxShadow: '0 2px 8px rgba(255,193,7,0.3)'
+                          }}>
+                            <i className="fas fa-money-bill-wave mr-2"></i>
+                            Doanh thu: <strong>{(() => {
                               const sum = allBookings.filter(b => {
                                 const d = new Date(b.createdAt || b.booking_date);
                                 return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear && ["paid","completed","refunded"].includes(b.status);
                               }).reduce((a, b) => a + (b.totalPrice || 0), 0);
                               return sum.toLocaleString('vi-VN');
-                            })()} VNĐ
-                          </span>
+                            })()} đ</strong>
+                          </div>
                         </div>
                         {/* /.chart-responsive */}
                       </div>
@@ -908,7 +1059,7 @@ function Home() {
                   <div className="card-body">
                     {mapChartData && mapChartData.chartData && (
                       <>
-                        <div style={{ position: 'relative', height: '250px', marginBottom: '15px' }}>
+                        <div className="chart-container" style={{ position: 'relative', height: windowWidth > 768 ? '350px' : '280px', marginBottom: '15px' }}>
                           <Doughnut 
                             data={mapChartData.chartData}
                             options={{
@@ -916,12 +1067,13 @@ function Home() {
                               maintainAspectRatio: false,
                               plugins: {
                                 legend: {
-                                  position: 'bottom',
+                                  position: windowWidth > 576 ? 'bottom' : 'right',
                                   labels: {
-                                    boxWidth: 12,
+                                    boxWidth: windowWidth > 576 ? 12 : 8,
                                     font: {
-                                      size: 11
+                                      size: windowWidth > 576 ? 11 : 9
                                     },
+                                    padding: windowWidth > 576 ? 10 : 5,
                                     generateLabels: function(chart) {
                                       const data = chart.data;
                                       if (data.labels.length && data.datasets.length) {
@@ -978,7 +1130,7 @@ function Home() {
                       </>
                     )}
 
-                    {(!mapChartData || !mapChartData.chartData || hotDestinations.length === 0) && (
+                    {(!mapChartData || !mapChartData.chartData) && (
                       <div className="text-center text-muted py-4">
                         <i className="fas fa-chart-pie fa-3x mb-3"></i>
                         <h6>Chưa có dữ liệu</h6>
@@ -1114,7 +1266,7 @@ function Home() {
                       {recentTours.map(tour => (
                         <li className="item" key={tour._id}>
                           <div className="product-img">
-                            <img src={tour.image?.[0]} alt="Tour Image" className="img-size-50 border border-light" />
+                            <img src={tour.image?.[0]} alt="Tour" className="img-size-50 border border-light" />
                           </div>
                           <div className="product-info">
                             <span className="product-title text-dark">{tour.name}

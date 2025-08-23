@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loginWithEmail, getUser } from '../api/api';
+import { loginWithEmail } from '../api/api';
 import Swal from 'sweetalert2';
 import './Login.css';
 

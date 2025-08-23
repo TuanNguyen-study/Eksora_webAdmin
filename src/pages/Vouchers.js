@@ -144,22 +144,30 @@ function Vouchers() {
       try {
         setLoading(true);
         
-        // Validate form
-        if (!form.tour_id || !form.code || !form.discount || !form.condition || !form.start_date || !form.end_date) {
+        // Validate form (except tour_id since "all" is a valid choice)
+        if (!form.code || !form.discount || !form.condition || !form.start_date || !form.end_date) {
           alert('Vui lòng điền đầy đủ thông tin!');
           return;
         }
-        
+
+        // Process data for submission
         const voucherData = {
-          tour_id: form.tour_id,
-          code: form.code,
+          tour_id: form.tour_id === 'all' ? null : form.tour_id, // Set null if "all" is selected
+          code: form.code.toUpperCase(),
           discount: parseInt(form.discount),
           condition: form.condition,
           start_date: form.start_date,
           end_date: form.end_date
         };
+
+        // Log for debugging
+        console.log('Creating voucher with data:', {
+          ...voucherData,
+          isGlobalVoucher: form.tour_id === 'all',
+          originalTourId: form.tour_id
+        });
         
-        const newVoucher = await createVoucher(voucherData);
+        await createVoucher(voucherData);
         
         // Refresh voucher list
         const updatedVouchers = await getPromotion();
@@ -204,7 +212,7 @@ function Vouchers() {
             </div>
             <div className="col-sm-6">
               <ol className="breadcrumb float-sm-right">
-                <li className="breadcrumb-item"><a href="#">Home</a></li>
+                <li className="breadcrumb-item"><button type="button" className="btn btn-link p-0 border-0 bg-transparent">Home</button></li>
                 <li className="breadcrumb-item active">Voucher</li>
               </ol>
             </div>
@@ -239,8 +247,15 @@ function Vouchers() {
                         <tbody>
                           {currentVouchers.map(voucher => (
                             <tr key={voucher._id}>
-                              <td>{voucher.code}</td>
-                              <td>{voucher.discount}</td>
+                              <td>
+                                {voucher.code}
+                                {voucher.tour_id === null && (
+                                  <span className="badge badge-info ml-2" title="Áp dụng cho tất cả tour">
+                                    <i className="fas fa-globe-asia"></i> Global
+                                  </span>
+                                )}
+                              </td>
+                              <td>{voucher.discount}%</td>
                               <td>{voucher.condition}</td>
                               <td>{voucher.start_date ? new Date(voucher.start_date).toLocaleDateString() : ''}</td>
                               <td>{voucher.end_date ? new Date(voucher.end_date).toLocaleDateString() : ''}</td>
@@ -357,7 +372,17 @@ function Vouchers() {
               <div className="modal-body">
                 {modalType === 'view' ? (
                   <div>
-                    <p><b>Tour:</b> {selectedVoucher.tour_id?.name || 'N/A'}</p>
+                    <p>
+                      <b>Tour:</b>{' '}
+                      {selectedVoucher.tour_id === null ? (
+                        <span className="text-success">
+                          <i className="fas fa-globe-asia mr-1"></i>
+                          Áp dụng cho tất cả tour
+                        </span>
+                      ) : (
+                        selectedVoucher.tour_id?.name || 'N/A'
+                      )}
+                    </p>
                     <p><b>Mã Voucher:</b> {selectedVoucher.code}</p>
                     <p><b>Giảm giá:</b> {selectedVoucher.discount}%</p>
                     <p><b>Điều kiện:</b> {selectedVoucher.condition}</p>
@@ -380,12 +405,19 @@ function Vouchers() {
                         required
                       >
                         <option value="">-- Chọn Tour --</option>
+                        <option value="all">🌐 Áp dụng cho tất cả tour</option>
                         {tours.map(tour => (
                           <option key={tour._id} value={tour._id}>
                             {tour.name} - {tour.location}
                           </option>
                         ))}
                       </select>
+                      <small className="form-text text-muted">
+                        {form.tour_id === 'all' ? 
+                          '📢 Voucher sẽ được áp dụng cho tất cả tour trong hệ thống' : 
+                          '💡 Chọn một tour cụ thể hoặc "Áp dụng cho tất cả tour"'
+                        }
+                      </small>
                     </div>
                     
                     <div className="form-group">
@@ -442,7 +474,7 @@ function Vouchers() {
                         value={form.condition} 
                         onChange={handleFormChange} 
                         rows="3"
-                        placeholder="VD: Áp dụng cho tour vịnh hạ long"
+                        placeholder="VD: Áp dụng cho tour Vịnh Hạ Long"
                         required 
                       />
                     </div>
