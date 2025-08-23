@@ -48,6 +48,61 @@ code {
 }
 
 /* Dashboard responsive styles */
+
+/* Chart container styles */
+.chart-container {
+  position: relative;
+  width: 100% !important;
+  height: auto;
+}
+
+.chart-container canvas {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* Doughnut chart specific styles */
+.chart-container .chartjs-render-monitor {
+  animation: none !important;
+}
+
+/* Fix for chart.js responsive issues */
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Line chart specific styles for booking stats */
+.chart.chart-container {
+  max-height: 280px;
+  overflow: hidden;
+}
+
+/* Map chart specific styles */
+.region-stats {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.region-stats::-webkit-scrollbar {
+  width: 6px;
+}
+
+.region-stats::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.region-stats::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.region-stats::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
 @media (max-width: 1200px) {
   /* Large screens adjustments */
   .info-box {
@@ -105,6 +160,11 @@ code {
 
   /* Chart responsive */
   .card-body canvas {
+    max-height: 200px !important;
+  }
+
+  /* Line chart specific responsive height */
+  .chart.chart-container {
     max-height: 200px !important;
   }
 
@@ -187,6 +247,44 @@ code {
 .row {
   margin-left: 0 !important;
   margin-right: 0 !important;
+}
+
+/* Tour Management Button Styles */
+.btn-outline-warning {
+  border-color: #ffc107 !important;
+  color: #ffc107 !important;
+}
+
+.btn-outline-warning:hover {
+  background-color: #ffc107 !important;
+  border-color: #ffc107 !important;
+  color: #212529 !important;
+}
+
+.btn-outline-success {
+  border-color: #28a745 !important;
+  color: #28a745 !important;
+}
+
+.btn-outline-success:hover {
+  background-color: #28a745 !important;
+  border-color: #28a745 !important;
+  color: #fff !important;
+}
+
+/* Delete button enhancement */
+.btn-danger {
+  background-color: #dc3545 !important;
+  border-color: #dc3545 !important;
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3) !important;
+}
+
+.btn-danger:hover {
+  background-color: #c82333 !important;
+  border-color: #bd2130 !important;
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4) !important;
+  transform: translateY(-1px) !important;
+  transition: all 0.2s ease !important;
 }
 
 .col-12,

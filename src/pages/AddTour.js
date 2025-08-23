@@ -1053,8 +1053,10 @@ function AddTour() {
       { name: 'status', value: form.status },
     ];
 
-    // Luôn kiểm tra supplier_id, ngay cả với supplier (để đảm bảo có giá trị)
-    requiredFields.push({ name: 'supplier_id', value: form.supplier_id });
+    // Chỉ kiểm tra supplier_id nếu không phải supplier (vì supplier dùng auth token)
+    if (userRole !== 'supplier') {
+      requiredFields.push({ name: 'supplier_id', value: form.supplier_id });
+    }
     
     const missing = {};
     requiredFields.forEach(f => {
@@ -1147,21 +1149,27 @@ function AddTour() {
         const foundCate = categories.find(c => c.name === cateID.name);
         cateID = foundCate ? foundCate._id : cateID._id || '';
       }
-      let supplier_id = form.supplier_id;
-      if (typeof supplier_id === 'object' && supplier_id._id) {
-        supplier_id = supplier_id._id;
-      }
       
-      // Đối với supplier, sử dụng ID của user hiện tại
-      if (userRole === 'supplier' && currentUser) {
-        supplier_id = currentUser._id;
+      // Xử lý supplier_id tùy theo role
+      let supplier_id = null;
+      if (userRole === 'supplier') {
+        // Supplier: không cần gửi supplier_id, backend sẽ lấy từ token
+        supplier_id = null; // Sẽ không được gửi trong payload
+        console.log('SUPPLIER MODE: supplier_id will be extracted from auth token');
+      } else {
+        // Admin: cần gửi supplier_id để chỉ định supplier
+        supplier_id = form.supplier_id;
+        if (typeof supplier_id === 'object' && supplier_id._id) {
+          supplier_id = supplier_id._id;
+        }
+        console.log('ADMIN MODE: sending supplier_id in payload:', supplier_id);
       }
       
       console.log('Final IDs:', {
         cateID,
         supplier_id,
         userRole,
-        currentUserRole: userRole
+        willSendSupplierId: supplier_id !== null
       });
       
       // Log current form state for debugging
@@ -1226,13 +1234,17 @@ function AddTour() {
         lng: form.lng ? parseFloat(form.lng) : 0,
         rating: form.rating || 0,
         cateID,
-        supplier_id,
         opening_time: form.opening_time,
         closing_time: form.closing_time,
         status: form.status,
         services,
         image: validImages,
       };
+      
+      // Chỉ thêm supplier_id nếu không phải supplier (admin mode)
+      if (userRole !== 'supplier' && supplier_id) {
+        tourData.supplier_id = supplier_id;
+      }
       
       // Validate all required fields one more time
       const requiredChecks = [
@@ -1242,12 +1254,16 @@ function AddTour() {
         { field: 'max_tickets_per_day', value: tourData.max_tickets_per_day },
         { field: 'location', value: tourData.location },
         { field: 'cateID', value: tourData.cateID },
-        { field: 'supplier_id', value: tourData.supplier_id },
         { field: 'opening_time', value: tourData.opening_time },
         { field: 'closing_time', value: tourData.closing_time },
         { field: 'status', value: tourData.status },
         { field: 'image', value: tourData.image }
       ];
+      
+      // Chỉ validate supplier_id nếu không phải supplier
+      if (userRole !== 'supplier') {
+        requiredChecks.push({ field: 'supplier_id', value: tourData.supplier_id });
+      }
       
       console.log('=== TIME FIELDS DEBUG ===');
       console.log('Form opening_time:', form.opening_time, 'Type:', typeof form.opening_time);
@@ -1268,6 +1284,7 @@ function AddTour() {
       
       console.log('Final tour data being sent:', tourData);
       console.log('User role for API call:', userRole);
+      console.log('API Endpoint will be:', userRole === 'supplier' ? '/api/create-by-supplier' : '/api/tours');
       
       // Debug: Log individual fields to check for issues
       console.log('=== DETAILED TOUR DATA DEBUG ===');
@@ -1306,13 +1323,20 @@ function AddTour() {
       console.log('===============================');
       
       // Gửi dữ liệu chuẩn hóa với userRole để chọn đúng endpoint
-      await createTour(tourData, userRole);
-      setMissingFields({});
-      alert('Thêm tour thành công!');
+      const newTour = await createTour(tourData, userRole);
+      console.log('✅ Tour created successfully:', newTour);
       
-      // Redirect to tours page and force refresh
-      navigate('/tours');
-      window.location.reload();
+      setMissingFields({});
+      alert('Thêm tour thành công! Đang chuyển về trang quản lý tour...');
+      
+      // Chuyển về trang tours với thông báo thành công
+      navigate('/tours', { 
+        state: { 
+          message: 'Tạo tour thành công!', 
+          newTourId: newTour?._id,
+          refresh: true 
+        } 
+      });
     } catch (err) {
       console.error('Error creating tour:', err);
       console.error('Error response:', err.response?.data);

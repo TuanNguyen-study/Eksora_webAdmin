@@ -76,16 +76,31 @@ export const getCategories = async () => {
 // API lấy danh sách các tour
 export const getTours = async () => {
   try {
-    // Chỉ lấy tours từ API, không populate để tránh ghi đè dữ liệu
-    const response = await AxiosInstance.get('/api/tours');
+    // Sử dụng API all-include-free để lấy tất cả tours bao gồm cả free tours
+    const response = await AxiosInstance.get('/api/all-include-free');
     const tours = response.data;
 
-    console.log('🔍 GET TOURS (RAW FROM API):', {
+    console.log('🔍 GET TOURS (FROM all-include-free):', {
       toursCount: tours.length,
-      message: 'Không populate để tránh ghi đè supplier data từ database'
+      message: 'Sử dụng API all-include-free để lấy tất cả tours'
     });
 
-    // Trả về tours như database đã lưu, không thay đổi gì
+    // Debug: Check status distribution
+    const statusCounts = {};
+    tours.forEach(tour => {
+      statusCounts[tour.status] = (statusCounts[tour.status] || 0) + 1;
+    });
+    console.log('📊 TOURS BY STATUS:', statusCounts);
+    
+    // Debug: List first few tours with status
+    console.log('📝 FIRST 5 TOURS:', tours.slice(0, 5).map(t => ({ 
+      id: t._id, 
+      name: t.name, 
+      status: t.status,
+      price: t.price 
+    })));
+
+    // Trả về tours từ API all-include-free
     return tours;
   } catch (error) {
     throw error;
@@ -215,10 +230,10 @@ export const getToursByRole = async () => {
   try {
     console.log('=== GET ALL TOURS (NO ROLE FILTERING) ===');
     
-    // Chỉ sử dụng getTours() để lấy tất cả tours từ /api/tours
-    // Không populate để tránh ghi đè dữ liệu supplier đã có trong database
+    // Sử dụng getTours() để lấy tất cả tours từ /api/all-include-free
+    // Bao gồm cả free tours và tours có phí
     const allTours = await getTours();
-    console.log('Total tours returned (raw from database):', allTours?.length);
+    console.log('Total tours returned (from all-include-free API):', allTours?.length);
     
     return allTours;
   } catch (error) {
@@ -519,12 +534,17 @@ export const createTour = async (tourData, userRole = null) => {
     { key: 'max_tickets_per_day', label: 'Số lượng vé tối đa trong ngày' },
     { key: 'location', label: 'Địa điểm' },
     { key: 'cateID', label: 'Danh mục' },
-    { key: 'supplier_id', label: 'Nhà cung cấp' },
     { key: 'image', label: 'Ảnh' },
     { key: 'opening_time', label: 'Giờ mở cửa' },
     { key: 'closing_time', label: 'Giờ đóng cửa' },
     { key: 'status', label: 'Trạng thái' },
   ];
+  
+  // Chỉ yêu cầu supplier_id nếu không phải supplier (vì supplier dùng token auth)
+  if (userRole !== 'supplier') {
+    requiredFields.push({ key: 'supplier_id', label: 'Nhà cung cấp' });
+  }
+  
   for (const field of requiredFields) {
     if (
       tourData[field.key] === undefined ||
@@ -555,14 +575,35 @@ export const createTour = async (tourData, userRole = null) => {
     ...tourData
   };
 
-  // Nếu là supplier, không gửi supplier_id vì server sẽ tự lấy từ token
+  // Đảm bảo supplier_id luôn là string ID gốc
+  if (typeof tourData.supplier_id === 'object') {
+    dataToSend.supplier_id = tourData.supplier_id?._id || tourData.supplier_id?.id;
+  }
+  
+  // Đối với supplier, không gửi supplier_id - để backend lấy từ token
   if (userRole === 'supplier') {
-    delete dataToSend.supplier_id;
-  } else {
-    // Nếu là admin, đảm bảo supplier_id là string ID
-    if (typeof tourData.supplier_id === 'object') {
-      dataToSend.supplier_id = tourData.supplier_id?._id || tourData.supplier_id?.id;
+    try {
+      // Với API /api/create-by-supplier, backend sẽ tự động lấy supplier_id từ token
+      // Nên chúng ta xóa supplier_id khỏi payload
+      delete dataToSend.supplier_id;
+      
+      console.log('🔍 SUPPLIER CREATE TOUR:', {
+        userRole,
+        message: 'Using /api/create-by-supplier - supplier_id will be extracted from auth token',
+        payloadHasSupplier: 'supplier_id' in dataToSend,
+        apiEndpoint: '/api/create-by-supplier'
+      });
+    } catch (error) {
+      console.error('Error preparing supplier data:', error);
     }
+  } else {
+    // Admin có thể tạo tour cho bất kỳ supplier nào - cần gửi supplier_id
+    console.log('🔍 ADMIN CREATE TOUR:', {
+      userRole,
+      supplierIdFromForm: dataToSend.supplier_id,
+      message: 'Admin creating tour for specific supplier',
+      apiEndpoint: '/api/tours'
+    });
   }
 
   // Convert cateID thành string ID nếu là object
@@ -969,11 +1010,11 @@ export const testEndpoints = async (_id) => {
 };
 
 // API thay đổi trạng thái tour (Active/Deactive) - chỉ dành cho admin
-export const toggleTourStatus = async (_id, isActive = true) => {
+export const toggleTourStatus = async (_id, currentStatus) => {
   try {
     console.log('=== API TOGGLE TOUR STATUS ===');
     console.log('Tour ID:', _id);
-    console.log('Is Active:', isActive);
+    console.log('Current Status:', currentStatus);
     console.log('===============================');
     
     if (!_id) {
@@ -986,19 +1027,32 @@ export const toggleTourStatus = async (_id, isActive = true) => {
       throw new Error('Chỉ có Admin mới được phép thay đổi trạng thái tour!');
     }
     
-    // Sử dụng endpoint approve với status mới - dựa trên pattern đã hoạt động
-    const status = isActive ? 'active' : 'deactive';
-    console.log('Using approve endpoint with status:', status);
+    // Xác định trạng thái mới
+    const newStatus = currentStatus === 'active' ? 'deactive' : 'active';
+    console.log('Toggling tour status from', currentStatus, 'to', newStatus);
     
-    const response = await AxiosInstance.put(`/api/approve/${_id}`, { 
-      approved: true, // Luôn là true vì tour đã được approve trước đó
-      status: status  // Thay đổi status theo yêu cầu
+    // Sử dụng API endpoint có sẵn của bạn
+    console.log('=== SENDING REQUEST ===');
+    console.log('URL:', `/api/update-tours/${_id}`);
+    console.log('Method:', 'PUT');
+    console.log('Payload:', { status: newStatus });
+    console.log('======================');
+    
+    const response = await AxiosInstance.put(`/api/update-tours/${_id}`, { 
+      status: newStatus
     });
+    
+    console.log('=== RESPONSE RECEIVED ===');
+    console.log('Status Code:', response.status);
+    console.log('Response Data:', response.data);
+    console.log('========================');
     
     console.log('Toggle status response:', response.data);
     
     // Toast success message
-    const successMessage = isActive ? 'Kích hoạt tour thành công!' : 'Hủy kích hoạt tour thành công!';
+    const successMessage = newStatus === 'active' ? 
+      'Chuyển trạng thái tour thành ACTIVE thành công!' : 
+      'Chuyển trạng thái tour thành DEACTIVE thành công!';
     console.log('Showing success toast:', successMessage);
     launchSuccessToast(successMessage);
     

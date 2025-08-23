@@ -156,9 +156,9 @@ function Users() {
                       </div>
                       <div className="card-footer">
                         <div className="text-right">
-                          <a href="#" className="btn btn-sm bg-teal">
+                          {/* <a href="#" className="btn btn-sm bg-teal">
                             <i className="fas fa-comments"></i>
-                          </a>
+                          </a> */}
                           <button className="btn btn-sm btn-primary" onClick={() => { setSelectedUser(user); setShowProfileModal(true); }}>
                             <i className="fas fa-user"></i> View Profile
                           </button>

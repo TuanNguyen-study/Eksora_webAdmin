@@ -103,9 +103,11 @@ function Home() {
     async function fetchRecentTours() {
       try {
         const data = await getTours();
-        setTotalTours(data.length);
+        // Lọc chỉ lấy những tour có giá từ 1.000 đồng trở lên
+        const validPriceTours = data.filter(tour => tour.price && tour.price >= 1000);
+        setTotalTours(validPriceTours.length);
         // Lấy 4 tour mới nhất (giả sử data đã sort theo created_at giảm dần, nếu không thì sort)
-        const sorted = data.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        const sorted = validPriceTours.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
         setRecentTours(sorted.slice(0, 4));
       } catch (err) {
         setRecentTours([]);
@@ -339,12 +341,16 @@ function Home() {
           return userDate.getMonth() === prevMonth && userDate.getFullYear() === prevYear;
         });
         
+        setNewMembersCount(currentMonthUsers.length);
+        
         const userGrowthPercent = prevMonthUsers.length === 0 ? 100 : 
           ((currentMonthUsers.length - prevMonthUsers.length) / prevMonthUsers.length) * 100;
         
         setUserGrowth(Math.round(userGrowthPercent));
       } catch (err) {
+        console.error('Error calculating user growth:', err);
         setUserGrowth(0);
+        setNewMembersCount(0);
       }
     }
     calculateUserGrowth();
@@ -368,7 +374,8 @@ function Home() {
         const categoryBookings = {};
         
         allBookings.forEach(booking => {
-          if (booking.tour_id && booking.tour_id.cateID) {
+          // Chỉ xét những booking có tour có giá từ 1.000 đồng trở lên
+          if (booking.tour_id && booking.tour_id.cateID && booking.tour_id.price >= 1000) {
             const cateID = typeof booking.tour_id.cateID === 'object' 
               ? booking.tour_id.cateID._id || booking.tour_id.cateID 
               : booking.tour_id.cateID;
@@ -398,10 +405,10 @@ function Home() {
           const category = categoriesData.find(c => c._id === cat.categoryId);
           const regionInfo = getVietnameseRegion(category?.name || 'Unknown');
           
-          // Find tours for this category to get random image
+          // Find tours for this category to get random image - chỉ lấy tour có giá từ 1.000đ
           const categoryTours = toursData.filter(tour => {
             const tourCateID = typeof tour.cateID === 'object' ? tour.cateID._id : tour.cateID;
-            return tourCateID === cat.categoryId && tour.image && tour.image.length > 0;
+            return tourCateID === cat.categoryId && tour.image && tour.image.length > 0 && tour.price >= 1000;
           });
           
           // Get random image from tours in this category
@@ -527,23 +534,70 @@ function Home() {
         const regionNames = Object.keys(regionStats);
         const regionBookings = regionNames.map(region => regionStats[region].bookings);
         
+        // Đảm bảo luôn có ít nhất 1 region để hiển thị chart
         if (regionNames.length > 0) {
+          // Màu sắc cố định cho từng miền
+          const regionColors = {
+            'Miền Bắc': '#FF6B6B',      // Red
+            'Miền Trung': '#4ECDC4',     // Teal
+            'Miền Nam': '#45B7D1',       // Blue
+            'Miền Đông': '#96CEB4',      // Green
+            'Miền Tây': '#FFEAA7',       // Yellow
+            'Miền Đông Bắc': '#DDA0DD'   // Plum
+          };
+          
+          const backgroundColors = regionNames.map(region => 
+            regionColors[region] || '#FF6B6B'
+          );
+          
+          const borderColors = regionNames.map(() => '#fff');
+          
+          console.log('Creating chart with data:', {
+            regionNames,
+            regionBookings,
+            backgroundColors,
+            borderColors
+          });
+          
           setMapChartData({
             regionStats,
             chartData: {
               labels: regionNames,
               datasets: [{
                 data: regionBookings,
-                backgroundColor: [
-                  '#FF6B6B', // Miền Bắc - Red
-                  '#4ECDC4', // Miền Trung - Teal  
-                  '#45B7D1', // Miền Nam - Blue
-                  '#96CEB4', // Extra colors if needed
-                  '#FFEAA7',
-                  '#DDA0DD'
-                ],
-                borderWidth: 2,
-                borderColor: '#fff'
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 3,
+                hoverBackgroundColor: backgroundColors.map(color => 
+                  color === '#FF6B6B' ? '#FF5252' : 
+                  color === '#4ECDC4' ? '#26C6DA' : 
+                  color === '#45B7D1' ? '#2196F3' : color
+                ),
+                hoverBorderColor: '#333',
+                hoverBorderWidth: 3,
+                // Thêm tùy chọn để tránh chart bị nhỏ
+                cutout: '40%', // Tạo khoảng trống ở giữa
+                radius: '90%'  // Kích thước chart
+              }]
+            }
+          });
+        } else {
+          // Nếu không có data thực, vẫn tạo demo chart
+          setMapChartData({
+            regionStats: {
+              'Miền Bắc': { region: 'Miền Bắc', bookings: 0, guests: 0, revenue: 0, provinces: ['Hà Nội'] },
+              'Miền Trung': { region: 'Miền Trung', bookings: 0, guests: 0, revenue: 0, provinces: ['Đà Nẵng'] },
+              'Miền Nam': { region: 'Miền Nam', bookings: 0, guests: 0, revenue: 0, provinces: ['TP.HCM'] }
+            },
+            chartData: {
+              labels: ['Miền Bắc', 'Miền Trung', 'Miền Nam'],
+              datasets: [{
+                data: [1, 1, 1], // Dữ liệu demo để hiển thị chart
+                backgroundColor: ['#FF6B6B', '#4ECDC4', '#45B7D1'],
+                borderColor: ['#fff', '#fff', '#fff'],
+                borderWidth: 3,
+                cutout: '40%',
+                radius: '90%'
               }]
             }
           });
@@ -560,15 +614,15 @@ function Home() {
     if (allBookings.length > 0) {
       fetchHotDestinationsAndCategoryData();
     } else {
-      // If no bookings, set demo data to show UI
-      console.log('No bookings data, setting demo destinations');
+      // If no bookings, set demo data to show UI structure
+      console.log('No bookings data, setting demo destinations with data');
       const demoDestinations = [
         {
           categoryId: 'demo1',
-          categoryName: 'Thành phố Hồ Chí Minh',
-          bookingCount: 0,
-          totalGuests: 0,
-          totalRevenue: 0,
+          categoryName: 'Du lịch Thành phố Hồ Chí Minh',
+          bookingCount: 12,
+          totalGuests: 24,
+          totalRevenue: 45000000,
           icon: 'fas fa-city',
           region: 'Miền Nam',
           province: 'TP.HCM',
@@ -577,18 +631,92 @@ function Home() {
         },
         {
           categoryId: 'demo2', 
-          categoryName: 'Hà Nội',
-          bookingCount: 0,
-          totalGuests: 0,
-          totalRevenue: 0,
+          categoryName: 'Du lịch Hà Nội',
+          bookingCount: 18,
+          totalGuests: 36,
+          totalRevenue: 65000000,
           icon: 'fas fa-landmark',
           region: 'Miền Bắc',
           province: 'Hà Nội',
           coordinates: [21.0285, 105.8542],
           randomImage: null
+        },
+        {
+          categoryId: 'demo3', 
+          categoryName: 'Du lịch Đà Nẵng',
+          bookingCount: 22,
+          totalGuests: 44,
+          totalRevenue: 78000000,
+          icon: 'fas fa-water',
+          region: 'Miền Trung',
+          province: 'Đà Nẵng',
+          coordinates: [16.0544, 108.2022],
+          randomImage: null
+        },
+        {
+          categoryId: 'demo4', 
+          categoryName: 'Du lịch Hội An',
+          bookingCount: 15,
+          totalGuests: 30,
+          totalRevenue: 52000000,
+          icon: 'fas fa-lantern',
+          region: 'Miền Trung',
+          province: 'Quảng Nam',
+          coordinates: [15.5394, 108.0191],
+          randomImage: null
+        },
+        {
+          categoryId: 'demo5', 
+          categoryName: 'Du lịch Nha Trang',
+          bookingCount: 20,
+          totalGuests: 40,
+          totalRevenue: 70000000,
+          icon: 'fas fa-umbrella-beach',
+          region: 'Miền Trung',
+          province: 'Khánh Hòa',
+          coordinates: [12.2585, 109.0526],
+          randomImage: null
+        },
+        {
+          categoryId: 'demo6', 
+          categoryName: 'Du lịch Phú Quốc',
+          bookingCount: 14,
+          totalGuests: 28,
+          totalRevenue: 48000000,
+          icon: 'fas fa-fish',
+          region: 'Miền Nam',
+          province: 'Kiên Giang',
+          coordinates: [10.2899, 103.9840],
+          randomImage: null
         }
       ];
+      
       setHotDestinations(demoDestinations);
+      
+      // Create demo map chart data
+      const regionStats = {
+        'Miền Bắc': { region: 'Miền Bắc', bookings: 18, guests: 36, revenue: 65000000, provinces: ['Hà Nội'] },
+        'Miền Trung': { region: 'Miền Trung', bookings: 57, guests: 114, revenue: 200000000, provinces: ['Đà Nẵng', 'Quảng Nam', 'Khánh Hòa'] },
+        'Miền Nam': { region: 'Miền Nam', bookings: 26, guests: 52, revenue: 93000000, provinces: ['TP.HCM', 'Kiên Giang'] }
+      };
+      
+      setMapChartData({
+        regionStats,
+        chartData: {
+          labels: ['Miền Bắc', 'Miền Trung', 'Miền Nam'],
+          datasets: [{
+            data: [18, 57, 26],
+            backgroundColor: ['#FF6B6B', '#4ECDC4', '#45B7D1'],
+            borderColor: ['#fff', '#fff', '#fff'],
+            borderWidth: 3,
+            hoverBackgroundColor: ['#FF5252', '#26C6DA', '#2196F3'],
+            hoverBorderColor: '#333',
+            hoverBorderWidth: 3,
+            cutout: '40%',
+            radius: '90%'
+          }]
+        }
+      });
     }
   }, [allBookings]);
   return (
@@ -850,7 +978,7 @@ function Home() {
                                   },
                                 },
                               }}
-                              height={windowWidth > 768 ? 300 : 200}
+                              height={windowWidth > 768 ? 250 : 180}
                             />
                           )}
                         </div>
@@ -963,9 +1091,9 @@ function Home() {
                     {console.log('Rendering hot destinations, count:', hotDestinations.length)}
                     {hotDestinations.length === 0 ? (
                       <div className="text-center py-4">
-                        <i className="fas fa-map-marked-alt fa-3x text-muted mb-3"></i>
+                        <i className="fas fa-spinner fa-spin fa-3x text-muted mb-3"></i>
                         <h5>Đang tải dữ liệu địa điểm...</h5>
-                        <p>Chưa có dữ liệu booking để hiển thị địa điểm hot.</p>
+                        <p>Vui lòng đợi trong giây lát.</p>
                       </div>
                     ) : (
                       <div className="row">
@@ -1057,23 +1185,46 @@ function Home() {
                     </h5>
                   </div>
                   <div className="card-body">
-                    {mapChartData && mapChartData.chartData && (
+                    {!mapChartData ? (
+                      <div className="text-center text-muted py-4">
+                        <i className="fas fa-spinner fa-spin fa-3x mb-3"></i>
+                        <h6>Đang tải dữ liệu biểu đồ...</h6>
+                        <p>Vui lòng đợi trong giây lát</p>
+                      </div>
+                    ) : (
                       <>
-                        <div className="chart-container" style={{ position: 'relative', height: windowWidth > 768 ? '350px' : '280px', marginBottom: '15px' }}>
-                          <Doughnut 
+                        <div className="chart-wrapper">
+                          <div className="chart-container" style={{ position: 'relative', height: windowWidth > 768 ? '350px' : '280px', width: '100%', marginBottom: '15px', minHeight: '250px' }}>
+                            <Doughnut 
                             data={mapChartData.chartData}
                             options={{
                               responsive: true,
                               maintainAspectRatio: false,
+                              layout: {
+                                padding: {
+                                  top: 10,
+                                  bottom: 10,
+                                  left: 10,
+                                  right: 10
+                                }
+                              },
+                              elements: {
+                                arc: {
+                                  borderWidth: 2,
+                                  borderColor: '#fff'
+                                }
+                              },
                               plugins: {
                                 legend: {
                                   position: windowWidth > 576 ? 'bottom' : 'right',
                                   labels: {
-                                    boxWidth: windowWidth > 576 ? 12 : 8,
+                                    boxWidth: windowWidth > 576 ? 15 : 10,
                                     font: {
-                                      size: windowWidth > 576 ? 11 : 9
+                                      size: windowWidth > 576 ? 12 : 10,
+                                      weight: 'bold'
                                     },
-                                    padding: windowWidth > 576 ? 10 : 5,
+                                    padding: windowWidth > 576 ? 15 : 10,
+                                    usePointStyle: true,
                                     generateLabels: function(chart) {
                                       const data = chart.data;
                                       if (data.labels.length && data.datasets.length) {
@@ -1082,8 +1233,8 @@ function Home() {
                                           return {
                                             text: `${label} (${regionData.bookings})`,
                                             fillStyle: data.datasets[0].backgroundColor[i],
-                                            strokeStyle: data.datasets[0].borderColor,
-                                            lineWidth: data.datasets[0].borderWidth,
+                                            strokeStyle: data.datasets[0].borderColor || '#fff',
+                                            lineWidth: data.datasets[0].borderWidth || 2,
                                             hidden: false,
                                             index: i
                                           };
@@ -1094,6 +1245,11 @@ function Home() {
                                   }
                                 },
                                 tooltip: {
+                                  backgroundColor: 'rgba(0,0,0,0.8)',
+                                  titleColor: '#fff',
+                                  bodyColor: '#fff',
+                                  borderColor: '#333',
+                                  borderWidth: 1,
                                   callbacks: {
                                     label: function(context) {
                                       const regionName = context.label;
@@ -1108,7 +1264,8 @@ function Home() {
                                 }
                               }
                             }}
-                          />
+                            />
+                          </div>
                         </div>
                         
                         {/* Region Statistics */}
@@ -1128,14 +1285,6 @@ function Home() {
                           ))}
                         </div>
                       </>
-                    )}
-
-                    {(!mapChartData || !mapChartData.chartData) && (
-                      <div className="text-center text-muted py-4">
-                        <i className="fas fa-chart-pie fa-3x mb-3"></i>
-                        <h6>Chưa có dữ liệu</h6>
-                        <p>Khi có booking, biểu đồ sẽ hiển thị phân bố theo vùng miền</p>
-                      </div>
                     )}
                   </div>
                 </div>
@@ -1223,8 +1372,8 @@ function Home() {
                                 (b.tour_id?._id ? b.tour_id._id.substring(0, 2) : '') +
                                 (b.user_id?._id ? b.user_id._id.slice(-2) : '')
                               }</td>
-                              <td>{b.tour_id?.name}</td>
-                              <td>{b.user_id?.first_name} {b.user_id?.last_name}</td>
+                              <td>{b.tour_id?.name || 'N/A'}</td>
+                              <td>{b.user_id ? `${b.user_id.first_name || ''} ${b.user_id.last_name || ''}`.trim() || 'N/A' : 'N/A'}</td>
                               <td>{b.status === 'pending' ? 'Chưa thanh toán' : b.status === 'success' ? 'Đã thanh toán' : b.status === 'cancelled' ? 'Đã hủy' : b.status}</td>
                               <td>{b.createdAt ? new Date(b.createdAt).toLocaleDateString('vi-VN') : ''}</td>
                             </tr>
@@ -1270,9 +1419,12 @@ function Home() {
                           </div>
                           <div className="product-info">
                             <span className="product-title text-dark">{tour.name}
-                              <span className="badge badge-primary float-right">{tour.price?.toLocaleString()} đ</span></span>
+                              <span className="badge badge-primary float-right">
+                                {tour.price >= 1000 ? tour.price.toLocaleString() : '1,000'} đ
+                              </span>
+                            </span>
                             <span className="product-description text-secondary">
-                              {tour.supplier_id?.name || tour.supplier_id || 'N/A'}
+                              {tour.supplier_id?.name || (typeof tour.supplier_id === 'string' ? tour.supplier_id : '') || 'N/A'}
                             </span>
                           </div>
                         </li>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getCategories, getSuppliers, updateTour, deleteTour, getToursByRole, approveTour, toggleTourStatus, getCurrentUserRole, getUser, debugTourDataStructure, validateToken } from '../api/api';
 import { FaTag, FaList, FaMapMarkerAlt, FaAlignLeft } from 'react-icons/fa';
 import { uploadImageToCloudinary } from '../api/cloudinary';
@@ -76,6 +76,8 @@ if (!document.getElementById('tour-map-custom-styles')) {
 
 function Tour() {
   const navigate = useNavigate();
+  const location = useLocation();
+  
   // Kiểm tra đăng nhập và token hợp lệ
   useEffect(() => {
     const checkAuth = async () => {
@@ -127,6 +129,8 @@ function Tour() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState(''); // Filter theo trạng thái
+  const [toggleStatusLoading, setToggleStatusLoading] = useState(false); // Loading state cho toggle status
   const [userRole, setUserRole] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [editingDescription, setEditingDescription] = useState(false);
@@ -692,6 +696,16 @@ function Tour() {
           });
         }
         
+        // Lọc theo trạng thái nếu admin chọn
+        if (selectedStatus && userRole === 'admin') {
+          console.log('🔍 FILTERING BY STATUS:', selectedStatus);
+          const beforeFilter = data.length;
+          console.log('Tours before status filter:', data.map(t => ({ name: t.name, status: t.status, id: t._id })));
+          data = data.filter(t => t.status === selectedStatus);
+          console.log(`Status filter (${selectedStatus}): ${beforeFilter} -> ${data.length} tours`);
+          console.log('Tours after status filter:', data.map(t => ({ name: t.name, status: t.status, id: t._id })));
+        }
+        
         /*
         // Lọc theo danh mục nếu có chọn
         if (selectedCategory) {
@@ -755,7 +769,14 @@ function Tour() {
         }
         console.log('=== FINAL TOURS BEFORE SET STATE ===');
         console.log('Final tours count:', data.length);
-        console.log('Final tours data:', data);
+        console.log('Selected status filter:', selectedStatus);
+        console.log('User role:', userRole);
+        console.log('Final tours with status:', data.map(t => ({ 
+          name: t.name, 
+          status: t.status, 
+          id: t._id,
+          supplier: typeof t.supplier_id === 'object' ? t.supplier_id?.name : 'ID: ' + t.supplier_id
+        })));
         console.log('=====================================');
         setTours(data);
         // Lấy danh sách province duy nhất từ tất cả tour
@@ -824,7 +845,50 @@ function Tour() {
       console.error('==========================================');
       setSuppliers([]);
     });
-  }, [selectedCategory, selectedMonth, selectedYear, priceRange, tourFilter, selectedProvince, selectedCategoryForProvince, priceFilter]);
+  }, [selectedCategory, selectedStatus, selectedMonth, selectedYear, priceRange, tourFilter, selectedProvince, selectedCategoryForProvince, priceFilter]);
+
+  // Handle state from AddTour page - check for new tour creation
+  useEffect(() => {
+    if (location.state?.refresh && location.state?.message) {
+      console.log('🆕 NEW TOUR CREATED - Refreshing tours list');
+      console.log('Message:', location.state.message);
+      console.log('New Tour ID:', location.state.newTourId);
+      
+      // Show success message
+      launchSuccessToast(location.state.message);
+      
+      // Force refresh tours list
+      async function refreshAfterNewTour() {
+        try {
+          const data = await getToursByRole();
+          console.log('🔄 Refreshed tours after new tour creation:', data?.length);
+          if (data) {
+            setTours(data);
+            // If we have new tour ID, scroll to it or highlight it
+            if (location.state.newTourId) {
+              setTimeout(() => {
+                const element = document.getElementById(`tour-row-${location.state.newTourId}`);
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  element.style.backgroundColor = '#d4edda';
+                  setTimeout(() => {
+                    element.style.backgroundColor = '';
+                  }, 3000);
+                }
+              }, 500);
+            }
+          }
+        } catch (error) {
+          console.error('Error refreshing tours after new tour:', error);
+        }
+      }
+      
+      refreshAfterNewTour();
+      
+      // Clear the state to prevent repeated execution
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Initialize map when edit modal opens
   useEffect(() => {
@@ -1031,7 +1095,7 @@ const handleEdit = (tour) => {
   setShowModal(true);
 };
   const handleDelete = async (id) => {
-    if (window.confirm('Bạn có chắc muốn xóa tour này?')) {
+    if (window.confirm('⚠️ CẢNH BÁO: XÓA VĨNH VIỄN TOUR ⚠️\n\nBạn có chắc chắn muốn XÓA VĨNH VIỄN tour này?\n\n❌ Hành động này KHÔNG THỂ HOÀN TÁC!\n❌ Tour sẽ bị xóa hoàn toàn khỏi hệ thống!\n❌ Tất cả thông tin liên quan sẽ mất!\n\nNếu bạn chỉ muốn ẩn tour, hãy dùng nút "Ẩn tour" thay vì "Xóa vĩnh viễn".')) {
       try {
         console.log('=== DELETE TOUR DEBUG ===');
         console.log('Deleting tour with ID:', id);
@@ -1088,51 +1152,55 @@ const handleEdit = (tour) => {
     }
   };
 
-  // Hàm xử lý thay đổi trạng thái tour (chỉ dành cho admin)
+  // Hàm xử lý thay đổi trạng thái tour
   const handleToggleStatus = async (tourId, currentStatus) => {
-    // Kiểm tra quyền admin trước khi thực hiện
-    if (userRole !== 'admin') {
-      launchErrorToast('Bạn không có quyền thực hiện hành động này!');
-      return;
-    }
-
-    console.log('=== HANDLE TOGGLE STATUS DEBUG ===');
-    console.log('Tour ID:', tourId);
-    console.log('Current Status:', currentStatus);
-    console.log('User Role:', userRole);
-    console.log('===================================');
-
-    // Test endpoints trước khi toggle
-    console.log('Testing available endpoints...');
-    // await testEndpoints(tourId); // Commented out - function not defined
-
     try {
-      const isCurrentlyActive = currentStatus === 'active';
-      const newStatus = !isCurrentlyActive;
+      console.log('=== TOGGLE TOUR STATUS ===');
+      console.log('Tour ID:', tourId);
+      console.log('Current Status:', currentStatus);
+      console.log('==========================');
+
+      // Xác nhận trước khi thay đổi trạng thái
+      const newStatus = currentStatus === 'active' ? 'deactive' : 'active';
+      const action = newStatus === 'active' ? 'KÍCH HOẠT' : 'TẮT';
+      const confirmMessage = `Bạn có chắc chắn muốn ${action} tour này không?\n\nTrạng thái sẽ chuyển từ "${currentStatus}" thành "${newStatus}".`;
       
-      console.log('Is Currently Active:', isCurrentlyActive);
-      console.log('New Status (boolean):', newStatus);
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+
+      // Set loading state
+      setToggleStatusLoading(true);
+
+      // Gọi API để thay đổi trạng thái
+      await toggleTourStatus(tourId, currentStatus);
       
-      await toggleTourStatus(tourId, newStatus);
+      // Success toast
+      const successAction = newStatus === 'active' ? 'kích hoạt' : 'tắt';
+      launchSuccessToast(`Đã ${successAction} tour thành công!`);
       
-      // Reload tours sau khi thay đổi trạng thái
+      // Refresh danh sách tours
       console.log('Reloading tours after status change...');
-      const data = await getToursByRole();
-      setTours(data);
+      const refreshedTours = await getToursByRole();
+      if (refreshedTours && Array.isArray(refreshedTours)) {
+        setTours(refreshedTours);
+        
+        // Tìm và cập nhật selectedTour nếu đang mở modal
+        if (selectedTour && selectedTour._id === tourId) {
+          const updatedTour = refreshedTours.find(t => t._id === tourId);
+          if (updatedTour) {
+            setSelectedTour(updatedTour);
+          }
+        }
+      }
       
-      // Toast message đã được hiển thị trong API, không cần alert thêm
-      console.log('Status toggle completed successfully');
+      console.log('Tour status toggled successfully');
     } catch (error) {
-      console.error('=== FRONTEND ERROR DETAILS ===');
       console.error('Error toggling tour status:', error);
-      console.error('Error type:', error.constructor.name);
-      console.error('Error message:', error.message);
-      console.error('Error response status:', error.response?.status);
-      console.error('Error response data:', error.response?.data);
-      console.error('==============================');
-      
-      // Toast error message đã được hiển thị trong API, không cần alert thêm
-      console.log('Error toast should be displayed by API layer');
+      // Error toast is already handled in the API function
+    } finally {
+      // Clear loading state
+      setToggleStatusLoading(false);
     }
   };
 
@@ -1759,13 +1827,13 @@ const handleFormSubmit = async (e) => {
                 {isAdmin() && (
                   <small className="text-muted ml-3">
                     <i className="fas fa-info-circle mr-1"></i>
-                    Hiển thị tất cả tours (đã duyệt và chờ duyệt)
+                    Hiển thị tất cả tours (đã duyệt và chờ duyệt) - Có thể kích hoạt/tắt tours
                   </small>
                 )}
                 {userRole === 'supplier' && (
                   <small className="text-muted ml-3">
                     <i className="fas fa-info-circle mr-1"></i>
-                    Hiển thị tours của bạn
+                    Hiển thị tours của bạn - Có thể kích hoạt/tắt tours của bạn
                   </small>
                 )}
               </div>
@@ -1795,6 +1863,16 @@ const handleFormSubmit = async (e) => {
                         <option key={cate._id} value={cate._id}>{cate.name}</option>
                       ))}
                     </select>
+                    {isAdmin() && (
+                      <select value={selectedStatus} onChange={e => { setSelectedStatus(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2 mb-2">
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="active">Active</option>
+                        <option value="deactive">Deactive</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    )}
                     {/* <select value={selectedProvince} onChange={e => { setSelectedProvince(e.target.value); setCurrentPage(1); }} className="form-control w-auto mr-2 mb-2">
                       <option value="">Tất cả địa điểm</option>
                       {provinceList.map(province => (
@@ -1880,11 +1958,12 @@ const handleFormSubmit = async (e) => {
                   </div>
                   
                   {/* Row 3: Clear filters button */}
-                  {(selectedProvince || selectedCategory || priceFilter.minPrice || priceFilter.maxPrice) && (
+                  {(selectedProvince || selectedCategory || selectedStatus || priceFilter.minPrice || priceFilter.maxPrice) && (
                     <div className="d-flex align-items-center">
                       <button className="btn btn-outline-secondary btn-sm" onClick={() => { 
                         setSelectedProvince(''); 
-                        setSelectedCategory(''); 
+                        setSelectedCategory('');
+                        setSelectedStatus('');
                         setPriceFilter({ minPrice: '', maxPrice: '' });
                         setCurrentPage(1); 
                       }}>
@@ -1895,6 +1974,7 @@ const handleFormSubmit = async (e) => {
                         <i className="fas fa-filter mr-1"></i>
                         Đang lọc: {[
                           selectedCategory && `Danh mục`,
+                          selectedStatus && `Trạng thái`,
                           selectedProvince && `Địa điểm`, 
                           (priceFilter.minPrice || priceFilter.maxPrice) && `Giá`
                         ].filter(Boolean).join(', ')}
@@ -1909,6 +1989,7 @@ const handleFormSubmit = async (e) => {
                       <button className="btn btn-primary mr-2" onClick={handleAdd}>Thêm Tour mới</button>
                       <button className="btn btn-success btn-sm mr-2" onClick={() => {
                         setSelectedCategory('');
+                        setSelectedStatus('');
                         setSelectedProvince('');
                         setPriceFilter({ minPrice: '', maxPrice: '' });
                         setCurrentPage(1);
@@ -1928,6 +2009,7 @@ const handleFormSubmit = async (e) => {
                     <div className="mb-3">
                       <button className="btn btn-success btn-sm mr-2" onClick={() => {
                         setSelectedCategory('');
+                        setSelectedStatus('');
                         setSelectedProvince('');
                         setPriceFilter({ minPrice: '', maxPrice: '' });
                         setCurrentPage(1);
@@ -1953,6 +2035,13 @@ const handleFormSubmit = async (e) => {
                           Debug Info: Tổng {tours.length} tours, hiển thị {pagedTours.length} tours trang {currentPage}
                           {selectedCategory && `, đã lọc theo danh mục: ${categories.find(c => c._id === selectedCategory)?.name}`}
                           {selectedProvince && `, đã lọc theo địa điểm: ${selectedProvince}`}
+                          {isAdmin() && (
+                            <span className="ml-2">
+                              | <i className="fas fa-eye text-success mr-1"></i>Active: {tours.filter(t => t.status === 'active').length}
+                              | <i className="fas fa-eye-slash text-danger mr-1"></i>Deactive: {tours.filter(t => t.status === 'deactive').length}
+                              | <i className="fas fa-hourglass-half text-warning mr-1"></i>Pending: {tours.filter(t => t.status === 'pending').length}
+                            </span>
+                          )}
                         </small>
                       </div>
                       <div className={`card`}>
@@ -1987,7 +2076,7 @@ const handleFormSubmit = async (e) => {
                               {pagedTours.map((tour, index) => {
                                 // console.log(`Rendering tour ${index}:`, tour.name);
                                 return (
-                                  <tr key={`tour-${tour._id}-${index}`}>
+                                  <tr key={`tour-${tour._id}-${index}`} id={`tour-row-${tour._id}`}>
                                     <td>{tour.name}</td>
                                     <td>{tour.location}</td>
                                     <td>
@@ -2088,19 +2177,31 @@ const handleFormSubmit = async (e) => {
                                           </button>
                                         </>
                                       )}
-                                      {isAdmin() && (tour.status === 'active' || tour.status === 'deactive') && (
+                                      {/* Button toggle status cho Admin và Supplier */}
+                                      {((isAdmin() && (tour.status === 'active' || tour.status === 'deactive')) || 
+                                        (userRole === 'supplier' && (tour.status === 'active' || tour.status === 'deactive'))) && (
                                         <button 
                                           className={`btn btn-sm mr-2 ${tour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
                                           onClick={() => handleToggleStatus(tour._id, tour.status)}
-                                          title={tour.status === 'active' ? 'Hủy kích hoạt tour' : 'Kích hoạt tour'}
+                                          disabled={toggleStatusLoading}
+                                          title={tour.status === 'active' ? 'Tắt tour (deactive)' : 'Kích hoạt tour (active)'}
                                         >
-                                          <i className={`fas ${tour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
-                                          {tour.status === 'active' ? 'Deactive' : 'Active'}
+                                          {toggleStatusLoading ? (
+                                            <i className="fas fa-spinner fa-spin mr-1"></i>
+                                          ) : (
+                                            <i className={`fas ${tour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
+                                          )}
+                                          {tour.status === 'active' ? 'Tắt' : 'Kích hoạt'}
                                         </button>
                                       )}
                                       {userRole === 'supplier' && (
-                                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(tour._id)}>
-                                          <i className="fas fa-trash mr-1"></i> Xóa
+                                        <button 
+                                          className="btn btn-danger btn-sm" 
+                                          onClick={() => handleDelete(tour._id)}
+                                          title="Xóa vĩnh viễn tour khỏi hệ thống (không thể khôi phục)"
+                                          style={{ borderWidth: '2px' }}
+                                        >
+                                          <i className="fas fa-trash-alt mr-1"></i> Xóa vĩnh viễn
                                         </button>
                                       )}
                                     </td>
@@ -2946,14 +3047,20 @@ const handleFormSubmit = async (e) => {
                     <>
                       <button 
                         type="button" 
-                        className={`btn ${selectedTour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
-                        onClick={() => {
-                          handleToggleStatus(selectedTour._id, selectedTour.status);
-                          setShowModal(false);
-                        }}
+                        className={`btn mr-2 ${selectedTour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
+                        onClick={() => handleToggleStatus(selectedTour._id, selectedTour.status)}
+                        disabled={toggleStatusLoading}
                       >
-                        <i className={`fas ${selectedTour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
-                        {selectedTour.status === 'active' ? 'Deactive Tour' : 'Active Tour'}
+                        {toggleStatusLoading ? (
+                          <>
+                            <i className="fas fa-spinner fa-spin mr-1"></i>Đang xử lý...
+                          </>
+                        ) : (
+                          <>
+                            <i className={`fas ${selectedTour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
+                            {selectedTour.status === 'active' ? 'Tắt Tour' : 'Kích hoạt Tour'}
+                          </>
+                        )}
                       </button>
                       <button 
                         type="button" 
@@ -2962,6 +3069,7 @@ const handleFormSubmit = async (e) => {
                           handleDelete(selectedTour._id);
                           setShowModal(false);
                         }}
+                        disabled={toggleStatusLoading}
                       >
                         <i className="fas fa-trash mr-1"></i>Xóa Tour
                       </button>
@@ -2973,9 +3081,29 @@ const handleFormSubmit = async (e) => {
                         type="button" 
                         className="btn btn-warning mr-2" 
                         onClick={() => handleEdit(selectedTour)}
+                        disabled={toggleStatusLoading}
                       >
                         <i className="fas fa-edit mr-1"></i>Sửa Tour
                       </button>
+                      {(selectedTour.status === 'active' || selectedTour.status === 'deactive') && (
+                        <button 
+                          type="button" 
+                          className={`btn mr-2 ${selectedTour.status === 'active' ? 'btn-warning' : 'btn-success'}`}
+                          onClick={() => handleToggleStatus(selectedTour._id, selectedTour.status)}
+                          disabled={toggleStatusLoading}
+                        >
+                          {toggleStatusLoading ? (
+                            <>
+                              <i className="fas fa-spinner fa-spin mr-1"></i>Đang xử lý...
+                            </>
+                          ) : (
+                            <>
+                              <i className={`fas ${selectedTour.status === 'active' ? 'fa-eye-slash' : 'fa-eye'} mr-1`}></i>
+                              {selectedTour.status === 'active' ? 'Tắt Tour' : 'Kích hoạt Tour'}
+                            </>
+                          )}
+                        </button>
+                      )}
                       <button 
                         type="button" 
                         className="btn btn-danger" 
@@ -2983,6 +3111,7 @@ const handleFormSubmit = async (e) => {
                           handleDelete(selectedTour._id);
                           setShowModal(false);
                         }}
+                        disabled={toggleStatusLoading}
                       >
                         <i className="fas fa-trash mr-1"></i>Xóa Tour
                       </button>
